@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+    <event name="catalog_product_save_after">
+        <observer name="product-save" instance="Gs\Searchtap\Observer\ProductSave" />
+    </event>
+    <!--<event name="catalog_product_import_finish_before">-->
+        <!--<observer name="import-csv-products" instance="Gs\Searchtap\Observer\ProductCSVImport" />-->
+    <!--</event>-->
+    <event name="catalog_product_import_bunch_save_after">
+        <observer name="import-csv-products" instance="Gs\Searchtap\Observer\ProductCSVImport" />
+    </event>
+    <event name="catalog_product_delete_after_done">
+        <observer name="import-csv-products" instance="Gs\Searchtap\Observer\ProductDelete" />
+    </event>
+    <!--<event name="catalog_product_attribute_update_before">-->
+        <!--<observer name="bulk-status-update" instance="Gs\Searchtap\Observer\BulkProductStatusUpdate" />-->
+    <!--</event>-->
+</config>

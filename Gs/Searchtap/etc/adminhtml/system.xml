@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <tab id="searchtap" translate="label">
+            <label>Searchtap</label>
+        </tab>
+        <section id="st_settings" translate="label" sortOrder="130" showInDefault="7" showInWebsite="1" showInStore="1">
+            <class>separator-top</class>
+            <label>Settings</label>
+            <tab>searchtap</tab>
+            <resource>Gs_Searchtap::searchtap_config</resource>
+
+            <group id="general" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Searchtap Configuration</label>
+                <field id="st_store" translate="label" type="select" sortOrder="1" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Select Store</label>
+                    <validate>required-entry</validate>
+                    <source_model>Gs\Searchtap\Model\Config\Source\GetStore</source_model>
+                </field>
+                <field id="st_collection" translate="label" type="text" sortOrder="1" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Collection Name</label>
+                    <validate>required-entry</validate>
+                    <comment>Get the collection name from searchtap dashboard.</comment>
+                </field>
+                <field id="st_admin_key" translate="label" type="text" sortOrder="1" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Admin Key</label>
+                    <validate>required-entry</validate>
+                    <comment>Get the admin from searchtap dashboard.</comment>
+                </field>
+                <field id="st_search_key" translate="label" type="text" sortOrder="1" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Search Key</label>
+                    <validate>required-entry</validate>
+                    <comment>Get the search key from searchtap dashboard.</comment>
+                </field>
+            </group>
+
+            <group id="attributes" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+            <label>Additional Attributes</label>
+
+                <field id="additional_attributes" translate="label" type="multiselect" sortOrder="80" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Select Attributes</label>
+                    <source_model>Gs\Searchtap\Model\Config\Source\GetAdditionalAttributes</source_model>
+                    <!--<frontend_model>Gs\Searchtap\Block\Adminhtml\System\Config\Form\Field\ProductAdditionalAttributes</frontend_model>-->
+                    <!--<backend_model>Magento\Config\Model\Config\Backend\Serialized\ArraySerialized</backend_model>-->
+                </field>
+            </group>
+
+            <group id="st_template" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Add Template</label>
+
+                <field id="st_html" translate="label" type="text" sortOrder="80" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Add HTML</label>
+                    <comment>Add the HTML template provided by Searchtap</comment>
+                </field>
+            </group>
+
+        </section>
+    </system>
+</config>

@@ -1,0 +1,16 @@
+<?php
+
+$objectManager = \Magento\Framework\App\ObjectManager::getInstance();
+$storeId = $objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_store');
+$collectionName = $objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_collection');
+$searchKey = $objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_search_key');
+$template = $objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/st_template/st_html');
+
+echo '
+    <script>
+        var st_collection_name = "' . $collectionName . '"
+        var st_search_key  = "' . $searchKey . '"
+    </script>
+';
+
+echo $template;
