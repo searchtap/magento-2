@@ -12,10 +12,12 @@ use Symfony\Component\Console\Input\InputOption;
 
 class Indexer extends Command
 {
+    protected $state;
     protected $objectManager;
     protected $storeId;
     protected $collectionName;
     protected $adminKey;
+    protected $applicationId;
     protected $selectedAttributes;
     protected $logger;
     protected $cert_path;
@@ -24,6 +26,11 @@ class Indexer extends Command
     protected $product_visibility_array = array('1' => 'Not Visible Individually', '2' => 'Catalog', '3' => 'Search', '4' => 'Catalog,Search');
 
     const NAME = 'p';
+
+    public function __construct(\Magento\Framework\App\State $state) {
+        $this->state = $state;
+        parent::__construct();
+    }
 
     protected function configure()
     {
@@ -43,6 +50,9 @@ class Indexer extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
+
+        $this->state->setAreaCode(\Magento\Framework\App\Area::AREA_GLOBAL);
+
         $productIds = $input->getOption(self::NAME);
         if(!$productIds)
             $this->indexProducts();
@@ -58,6 +68,7 @@ class Indexer extends Command
         $this->storeId = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_store');
         $this->collectionName = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_collection');
         $this->adminKey = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_admin_key');
+        $this->applicationId = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_application_id');
         $this->selectedAttributes = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/attributes/additional_attributes');
     }
 
@@ -69,6 +80,7 @@ class Indexer extends Command
 
         echo 'Start Indexing';
         $productIds = explode(",", $ids);
+
         $this->getStoreDetails();
 
         $productCollection = $this->objectManager->create('Magento\Catalog\Model\ResourceModel\Product\CollectionFactory');
@@ -259,13 +271,10 @@ class Indexer extends Command
         $this->logger = new \Zend\Log\Logger();
         $this->logger->addWriter($writer);
 
-
         $productId = $product->getId();
         $productName = $product->getName();
         $productSKU = $product->getSKU();
         $productStatus = $product->getStatus();
-
-        $this->logger->info('In array status = ' . $productStatus);
 
         $productVisibility = $this->product_visibility_array[$product->getVisibility()];
         $productURL = $product->getProductUrl();
@@ -442,7 +451,6 @@ class Indexer extends Command
 
     public function searchtapCurlRequest($product_json)
     {
-
         $writer = new \Zend\Log\Writer\Stream(BP . '/var/log/searchtap.log');
         $this->logger = new \Zend\Log\Logger();
         $this->logger->addWriter($writer);
@@ -450,10 +458,10 @@ class Indexer extends Command
         $curl = curl_init();
 
         curl_setopt_array($curl, array(
-            CURLOPT_URL => "https://api.searchtap.io/v1/collections/" . $this->collectionName,
-            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_URL => "https://manage.searchtap.net/v2/collections/" . $this->collectionName . "/records",
+            CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_SSL_VERIFYHOST => 2,
-            CURLOPT_CAINFO => $this->cert_path,
+            CURLOPT_CAINFO => "",
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_ENCODING => "",
             CURLOPT_MAXREDIRS => 10,
@@ -462,16 +470,16 @@ class Indexer extends Command
             CURLOPT_CUSTOMREQUEST => "POST",
             CURLOPT_POSTFIELDS => $product_json,
             CURLOPT_HTTPHEADER => array(
-                "cache-control: no-cache",
                 "content-type: application/json",
-                "x-auth-token: " . $this->adminKey
+                "Authorization: Bearer " . $this->adminKey
             ),
         ));
 
         curl_exec($curl);
         $err = curl_error($curl);
+        $this->logger->info($err);
 
-        $this->logger->info( curl_getinfo($curl, CURLINFO_HTTP_CODE));
+        $this->logger->info( "SearchTap API response :: " . curl_getinfo($curl, CURLINFO_HTTP_CODE) );
 
         curl_close($curl);
 
@@ -482,34 +490,45 @@ class Indexer extends Command
 
     public function searchtapCurlDeleteRequest($productIds)
     {
+        $writer = new \Zend\Log\Writer\Stream(BP . '/var/log/searchtap.log');
+        $this->logger = new \Zend\Log\Logger();
+        $this->logger->addWriter($writer);
+
         $curl = curl_init();
 
-        $data_json = json_encode($productIds);
+        if(count($productIds) == 0)
+            return;
 
-        curl_setopt_array($curl, array(
-            CURLOPT_URL => "https://api.searchtap.io/v1/collections/" . $this->collectionName . "/delete",
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
-            CURLOPT_CAINFO => $this->cert_path,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_ENCODING => "",
-            CURLOPT_MAXREDIRS => 10,
-            CURLOPT_TIMEOUT => 30,
-            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-            CURLOPT_CUSTOMREQUEST => "DELETE",
-            CURLOPT_POSTFIELDS => $data_json,
-            CURLOPT_HTTPHEADER => array(
-                "cache-control: no-cache",
-                "content-type: application/json",
-                "x-auth-token: " . $this->adminKey
-            ),
-        ));
+//        $data_json = json_encode($productIds);
+
+        foreach ($productIds as $id) {
+            curl_setopt_array($curl, array(
+                CURLOPT_URL => "https://manage.searchtap.net/v2/collections/" . $this->collectionName . "/records/" . $id,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => 2,
+                CURLOPT_CAINFO => "",
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_ENCODING => "",
+                CURLOPT_MAXREDIRS => 10,
+                CURLOPT_TIMEOUT => 30,
+                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+                CURLOPT_CUSTOMREQUEST => "DELETE",
+                CURLOPT_HTTPHEADER => array(
+                    "content-type: application/json",
+                    "Authorization: Bearer " . $this->adminKey
+                ),
+            ));
+        }
 
         $exec = curl_exec($curl);
 
         $err = curl_error($curl);
 
-        $result1 = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        $this->logger->info($err);
+
+        $result = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+
+        $this->logger->info("SearchTap Delete API response :: " . $result);
 
         curl_close($curl);
 
