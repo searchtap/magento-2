@@ -21,6 +21,8 @@ class Indexer extends Command
     protected $selectedAttributes;
     protected $logger;
     protected $cert_path;
+    protected $imageWidth = 0;
+    protected $imageHeight = 0;
     public $actualCount = 0;
     public $parentCount = 0;
     protected $product_visibility_array = array('1' => 'Not Visible Individually', '2' => 'Catalog', '3' => 'Search', '4' => 'Catalog,Search');
@@ -50,10 +52,10 @@ class Indexer extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-
         $this->state->setAreaCode(\Magento\Framework\App\Area::AREA_GLOBAL);
 
         $productIds = $input->getOption(self::NAME);
+
         if(!$productIds)
             $this->indexProducts();
         else
@@ -66,6 +68,8 @@ class Indexer extends Command
         $this->product_visibility_array = array('1' => 'Not Visible Individually', '2' => 'Catalog', '3' => 'Search', '4' => 'Catalog,Search');
         $this->objectManager = \Magento\Framework\App\ObjectManager::getInstance();
         $this->storeId = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_store');
+        $this->imageWidth = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/image/st_image_width');
+        $this->imageHeight = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/image/st_image_height');
         $this->collectionName = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_collection');
         $this->adminKey = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_admin_key');
         $this->applicationId = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_application_id');
@@ -266,7 +270,6 @@ class Indexer extends Command
 
     public function productArray($product)
     {
-
         $writer = new \Zend\Log\Writer\Stream(BP . '/var/log/searchtap.log');
         $this->logger = new \Zend\Log\Logger();
         $this->logger->addWriter($writer);
@@ -333,9 +336,17 @@ class Indexer extends Command
 
         //get images
         $store = $this->objectManager->get('Magento\Store\Model\StoreManagerInterface')->getStore();
-       // $productImage = $store->getBaseUrl(\Magento\Framework\UrlInterface::URL_TYPE_MEDIA) . 'catalog/product' . $product->getImage();
+        $productImage = $store->getBaseUrl(\Magento\Framework\UrlInterface::URL_TYPE_MEDIA) . 'catalog/product' . $product->getImage();
         $productSmallImage = $store->getBaseUrl(\Magento\Framework\UrlInterface::URL_TYPE_MEDIA) . 'catalog/product' . $product->getSmallImage();
         $productThumbnailImage = $store->getBaseUrl(\Magento\Framework\UrlInterface::URL_TYPE_MEDIA) . 'catalog/product' . $product->getThumbnail();
+
+        $emulator = $this->objectManager->create('Magento\Store\Model\App\Emulation');
+        $emulator->startEnvironmentEmulation($this->storeId, \Magento\Framework\App\Area::AREA_FRONTEND, true);
+
+        $image_helper = $this->objectManager->create('Magento\Catalog\Helper\ImageFactory');
+        $image = $image_helper->create()->init($product,'category_page_list')->resize($this->imageWidth, $this->imageHeight)->getUrl();
+
+        $emulator->stopEnvironmentEmulation();
 
         //get currency code and symbol
         $currencyCode = $store->getCurrentCurrencyCode();
@@ -436,12 +447,13 @@ class Indexer extends Command
             'in_stock' => $productInStock,
             'parent_id' => $parentId,
             'variation' => $variation,
-           // 'image' => $productImage,
+            'image' => $productImage,
             'small_image' => $productSmallImage,
             'thumbnail_image' => $productThumbnailImage,
             '_category' => $_categories,
             'currency_code' => $currencyCode,
-            'currency_symbol' => $currencySymbol
+            'currency_symbol' => $currencySymbol,
+            'cache_image' => $image
         );
 
         $array = array_merge($productArray, $catpathArray, $catlevelArray, $customAttributes);
@@ -536,86 +548,6 @@ class Indexer extends Command
 //            Mage::log("Exception occurred", null, $this->log_file_name);
 //        }
         return;
-    }
-
-    //Trigger on product save from backend.
-    public function productSave($product)
-    {
-
-        $writer = new \Zend\Log\Writer\Stream(BP . '/var/log/searchtap.log');
-        $this->logger = new \Zend\Log\Logger();
-        $this->logger->addWriter($writer);
-
-        $this->getStoreDetails();
-
-        //check if product belongs to configurable association
-        $parentIds = $this->objectManager->create('Magento\ConfigurableProduct\Model\ResourceModel\Product\Type\Configurable')->getParentIdsByChild($product->getId());
-        if (isset($parentIds[0])) {
-            $product = $this->objectManager->create('Magento\Catalog\Model\Product')->load($parentIds[0]);
-        }
-
-        $status = $product->getStatus();
-        $this->logger->info('Product ID = ' . $product->getId());
-        $this->logger->info('Product status = ' . $status);
-//        if ($status != 2) {
-
-            $this->logger->info('sudo php /var/www/html/bin/magento searchtap:indexer --p '. $product->getId());
-            exec('php /var/www/html/bin/magento searchtap:indexer --p '. $product->getId() .' > /dev/null 2>/dev/null &');
-            //$productArr[] = $this->productArray($product);
-            //$productJson = json_encode($productArr);
-           // $this->searchtapCurlRequest($productJson);
-//        } else {
-//            $productId[] = $product->getId();
-//            $this->searchtapCurlDeleteRequest($productId);
-//        }
-    }
-
-    public function productBulkStatusUpdate($productIds)
-    {
-
-        $this->getStoreDetails();
-
-        $productCollection = $this->objectManager->create('Magento\Catalog\Model\ResourceModel\Product\CollectionFactory');
-
-        $collection = $productCollection->create()
-            ->addStoreFilter($this->storeId)
-            ->addAttributeToSelect('*')
-            ->addAttributeToFilter('entity_id', array('in' => $productIds));
-
-        $status = 0;
-
-        foreach ($collection as $product) {
-
-            //check for product belongs to configurable association.
-            $parentIds = $this->objectManager->create('Magento\ConfigurableProduct\Model\ResourceModel\Product\Type\Configurable')->getParentIdsByChild($product->getId());
-            if (isset($parentIds[0])) {
-                $product = $this->objectManager->create('Magento\Catalog\Model\Product')->load($parentIds[0]);
-            }
-
-            $status = $product->getStatus();
-
-            if ($status != 2) {
-                $productArr[] = $this->productArray($product);
-            } else {
-                $deleteProductIds[] = $product->getId();
-            }
-        }
-
-        if ($status != 2) {
-            $productJson = json_encode($productArr);
-            $this->searchtapCurlRequest($productJson);
-        } else {
-            $this->searchtapCurlDeleteRequest($deleteProductIds);
-        }
-    }
-
-    public function productDelete($product)
-    {
-
-        $this->getStoreDetails();
-
-        $productId[] = $product->getId();
-        $this->searchtapCurlDeleteRequest($productId);
     }
 }
 
