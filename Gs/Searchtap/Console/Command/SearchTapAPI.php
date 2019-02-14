@@ -51,16 +51,13 @@ class SearchTapAPI {
         $this->logger = new \Zend\Log\Logger();
         $this->logger->addWriter($writer);
 
+        $data_json = json_encode($productIds);
+
         $curl = curl_init();
 
-        if(count($productIds) == 0)
-            return;
-
-//        $data_json = json_encode($productIds);
-
-        foreach ($productIds as $id) {
+//        foreach ($productIds as $id) {
             curl_setopt_array($curl, array(
-                CURLOPT_URL => "https://manage.searchtap.net/v2/collections/" . $collectionName . "/records/" . $id,
+                CURLOPT_URL => "https://manage.searchtap.net/v2/collections/" . $collectionName . "/records/",
                 CURLOPT_SSL_VERIFYPEER => false,
                 CURLOPT_SSL_VERIFYHOST => 2,
                 CURLOPT_CAINFO => "",
@@ -70,22 +67,24 @@ class SearchTapAPI {
                 CURLOPT_TIMEOUT => 30,
                 CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
                 CURLOPT_CUSTOMREQUEST => "DELETE",
+                CURLOPT_POSTFIELDS => $data_json,
                 CURLOPT_HTTPHEADER => array(
                     "content-type: application/json",
                     "Authorization: Bearer " . $adminKey
                 ),
             ));
-        }
 
-        $exec = curl_exec($curl);
+            $exec = curl_exec($curl);
 
-        $err = curl_error($curl);
+            $err = curl_error($curl);
 
-        $this->logger->info($err);
+            $this->logger->info($err);
 
-        $result = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+            $result = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+            echo $result;
 
-        $this->logger->info("SearchTap Delete API response :: " . $result);
+            $this->logger->info("SearchTap Delete API response :: " . $result);
+       // }
 
         curl_close($curl);
 

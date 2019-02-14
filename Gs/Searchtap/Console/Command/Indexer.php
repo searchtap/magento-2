@@ -4,9 +4,12 @@ namespace Gs\Searchtap\Console\Command;
 
 use Gs\Searchtap\Observer\Searchtap;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Input\InputOption;
+use Symfony\Component\Console\Input\InputDefinition;
+use Gs\Searchtap\Console\Command\SearchTapAPI;
 
 //use Searchtap\src\Searchtap\SearchTapClient;
 
@@ -28,6 +31,7 @@ class Indexer extends Command
     protected $product_visibility_array = array('1' => 'Not Visible Individually', '2' => 'Catalog', '3' => 'Search', '4' => 'Catalog,Search');
 
     const NAME = 'p';
+    const DELETE = 'd';
 
     public function __construct(\Magento\Framework\App\State $state) {
         $this->state = $state;
@@ -40,26 +44,42 @@ class Indexer extends Command
             new InputOption(
                 self::NAME,
                 null,
-                InputOption::VALUE_REQUIRED,
-                'p'
+                InputOption::VALUE_OPTIONAL
+            ),
+            new InputOption(
+                self::DELETE,
+                null,
+                InputOption::VALUE_OPTIONAL
             )
         ];
 
         $this->setName('searchtap:indexer')
             ->setDescription('Searchtap')
-            ->setDefinition($options);;
+            ->setDefinition($options);
+
+        parent::configure();
     }
 
     protected function execute(InputInterface $input, OutputInterface $output)
     {
         $this->state->setAreaCode(\Magento\Framework\App\Area::AREA_GLOBAL);
 
-        $productIds = $input->getOption(self::NAME);
+        if($input->getOption(self::NAME) != null) {
+            $productIds = $input->getOption(self::NAME);
 
-        if(!$productIds)
-            $this->indexProducts();
-        else
-            $this->indexSingleProduct($productIds);
+            if($productIds)
+                $this->indexSingleProduct($productIds);
+        }
+
+        else if($input->getOption(self::DELETE) != null) {
+            $this->getStoreDetails();
+            $productIds = explode(",", $input->getOption(self::DELETE));
+            $st = new SearchTapAPI();
+            $st->searchtapCurlDeleteRequest($productIds, $this->collectionName, $this->adminKey);
+        }
+
+        else $this->indexProducts();
+
     }
 
     public function getStoreDetails()
@@ -197,7 +217,8 @@ class Indexer extends Command
                 $productIds[] = $product->getId();
             }
 
-            $this->searchtapCurlDeleteRequest($productIds);
+            $st = new SearchTapAPI();
+            $st->searchtapCurlDeleteRequest($productIds, $this->collectionName, $this->adminKey);
 
             $i += $productSteps;
 
@@ -263,7 +284,8 @@ class Indexer extends Command
 
         unset($product_array);
 
-        $this->searchtapCurlRequest($product_json);
+        $st = new SearchTapAPI();
+        $st->searchtapCurlRequest($product_json, $this->collectionName, $this->adminKey);
 
         unset($product_json);
     }
@@ -275,7 +297,7 @@ class Indexer extends Command
         $this->logger->addWriter($writer);
 
         $productId = $product->getId();
-        $productName = $product->getName();
+        $productName = html_entity_decode($product->getName());
         $productSKU = $product->getSKU();
         $productStatus = $product->getStatus();
 
@@ -299,6 +321,7 @@ class Indexer extends Command
         else
             $parentId = 0;
 
+        $configurableAttributes = array();
 
         //get variations of configurable products
         $variation = array();
@@ -324,15 +347,21 @@ class Indexer extends Command
                     $childStock = $this->objectManager->get('Magento\CatalogInventory\Api\StockRegistryInterface')->getStockItem($childProduct->getId());
                     $option[$p['sku']]['stock_qty'] = $childStock->getQty();
                     $option[$p['sku']]['in_stock'] = $childStock->getIsInStock();
+
+                    if($option[$p['sku']]['in_stock'] && $option[$p['sku']]['stock_qty'] > 0)
+                        $configurableAttributes['_' . $p['attribute_code']][] = $p['option_title'];
+
                 }
             }
+
+            foreach ($configurableAttributes as $key => $value)
+                $configurableAttributes[$key] = array_unique($value);
 
             foreach ($option as $child) {
                 $variation[$childCount] = $child;
                 $childCount++;
             }
         }
-
 
         //get images
         $store = $this->objectManager->get('Magento\Store\Model\StoreManagerInterface')->getStore();
@@ -345,6 +374,9 @@ class Indexer extends Command
 
         $image_helper = $this->objectManager->create('Magento\Catalog\Helper\ImageFactory');
         $image = $image_helper->create()->init($product,'category_page_list')->resize($this->imageWidth, $this->imageHeight)->getUrl();
+        $thubnail_cache_image = $image_helper->create()->init($product,'product_thumbnail_image')->resize($this->imageWidth, $this->imageHeight)->getUrl();
+        $small_cache_image = $image_helper->create()->init($product,'product_small_image')->resize($this->imageWidth, $this->imageHeight)->getUrl();
+        $base_cache_image = $image_helper->create()->init($product,'product_base_image')->resize($this->imageWidth, $this->imageHeight)->getUrl();
 
         $emulator->stopEnvironmentEmulation();
 
@@ -380,11 +412,11 @@ class Indexer extends Command
                 if (!$cat->hasChildren()) {
                     if(!in_array($cat->getName(), $_categories))
                         if($cat->getIsActive()) {
-                            $_categories[] = $cat->getName();
+                            $_categories[] = htmlspecialchars_decode($cat->getName());
                         }
                 }
                 $path_name[$row][0] = $cat->getId();
-                $path_name[$row][1] = $cat->getName();
+                $path_name[$row][1] = htmlspecialchars_decode($cat->getName());
                 $path_name[$row][2] = $cat->getIsActive();
 
                 $row++;
@@ -424,9 +456,9 @@ class Indexer extends Command
             if ($value) {
                 if ($product->getResource()->getAttribute($attr)->getFrontendInput() == 'multiselect') {
                     $explodeAttrs = explode(',', $product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
-                    $customAttributes[$attr] = $explodeAttrs;
+                    $customAttributes[$attr] = array_map("htmlspecialchars_decode", $explodeAttrs);
                 } else
-                    $customAttributes[$attr] = $product->getResource()->getAttribute($attr)->getFrontend()->getValue($product);
+                    $customAttributes[$attr] = htmlspecialchars_decode($product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
             }
         }
 
@@ -453,101 +485,15 @@ class Indexer extends Command
             '_category' => $_categories,
             'currency_code' => $currencyCode,
             'currency_symbol' => $currencySymbol,
-            'cache_image' => $image
+            'cache_image' => $image,
+            'thumbnail_cache_image' => $thubnail_cache_image,
+            'small_cache_image' => $small_cache_image,
+            'base_cache_image' => $base_cache_image
         );
 
-        $array = array_merge($productArray, $catpathArray, $catlevelArray, $customAttributes);
+        $array = array_merge($productArray, $catpathArray, $catlevelArray, $customAttributes, $configurableAttributes);
 
         return $array;
-    }
-
-    public function searchtapCurlRequest($product_json)
-    {
-        $writer = new \Zend\Log\Writer\Stream(BP . '/var/log/searchtap.log');
-        $this->logger = new \Zend\Log\Logger();
-        $this->logger->addWriter($writer);
-
-        $curl = curl_init();
-
-        curl_setopt_array($curl, array(
-            CURLOPT_URL => "https://manage.searchtap.net/v2/collections/" . $this->collectionName . "/records",
-            CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_SSL_VERIFYHOST => 2,
-            CURLOPT_CAINFO => "",
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_ENCODING => "",
-            CURLOPT_MAXREDIRS => 10,
-            CURLOPT_TIMEOUT => 30,
-            CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-            CURLOPT_CUSTOMREQUEST => "POST",
-            CURLOPT_POSTFIELDS => $product_json,
-            CURLOPT_HTTPHEADER => array(
-                "content-type: application/json",
-                "Authorization: Bearer " . $this->adminKey
-            ),
-        ));
-
-        curl_exec($curl);
-        $err = curl_error($curl);
-        $this->logger->info($err);
-
-        $this->logger->info( "SearchTap API response :: " . curl_getinfo($curl, CURLINFO_HTTP_CODE) );
-
-        curl_close($curl);
-
-//        if ($err) {
-//            Mage::log("Exception occurred", null, $this->log_file_name);
-//        }
-    }
-
-    public function searchtapCurlDeleteRequest($productIds)
-    {
-        $writer = new \Zend\Log\Writer\Stream(BP . '/var/log/searchtap.log');
-        $this->logger = new \Zend\Log\Logger();
-        $this->logger->addWriter($writer);
-
-        $curl = curl_init();
-
-        if(count($productIds) == 0)
-            return;
-
-//        $data_json = json_encode($productIds);
-
-        foreach ($productIds as $id) {
-            curl_setopt_array($curl, array(
-                CURLOPT_URL => "https://manage.searchtap.net/v2/collections/" . $this->collectionName . "/records/" . $id,
-                CURLOPT_SSL_VERIFYPEER => false,
-                CURLOPT_SSL_VERIFYHOST => 2,
-                CURLOPT_CAINFO => "",
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_ENCODING => "",
-                CURLOPT_MAXREDIRS => 10,
-                CURLOPT_TIMEOUT => 30,
-                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-                CURLOPT_CUSTOMREQUEST => "DELETE",
-                CURLOPT_HTTPHEADER => array(
-                    "content-type: application/json",
-                    "Authorization: Bearer " . $this->adminKey
-                ),
-            ));
-        }
-
-        $exec = curl_exec($curl);
-
-        $err = curl_error($curl);
-
-        $this->logger->info($err);
-
-        $result = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-
-        $this->logger->info("SearchTap Delete API response :: " . $result);
-
-        curl_close($curl);
-
-//        if ($err) {
-//            Mage::log("Exception occurred", null, $this->log_file_name);
-//        }
-        return;
     }
 }
 

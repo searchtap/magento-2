@@ -28,5 +28,4 @@ class ProductDelete implements ObserverInterface {
         $st = new SearchTapAPI();
         $st->searchtapCurlDeleteRequest($productIds, $collectionName, $adminKey);
     }
-
 }
