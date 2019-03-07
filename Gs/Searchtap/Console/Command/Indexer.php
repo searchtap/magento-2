@@ -342,6 +342,7 @@ class Indexer extends Command
                     $option[$p['sku']]['discounted_price'] = (float)$childProduct->getFinalPrice();
                     $option[$p['sku']]['status'] = (int)$childProduct->getStatus();
                     $option[$p['sku']]['visibility'] = $this->product_visibility_array[$childProduct->getVisibility()];
+                    $option[$p['sku']]['value_id'] = $p['value_index'];
 
                     //get stock details
                     $childStock = $this->objectManager->get('Magento\CatalogInventory\Api\StockRegistryInterface')->getStockItem($childProduct->getId());
