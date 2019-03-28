@@ -32,8 +32,10 @@ class Indexer extends Command
 
     const NAME = 'p';
     const DELETE = 'd';
+    const STORE = 's';
 
-    public function __construct(\Magento\Framework\App\State $state) {
+    public function __construct(\Magento\Framework\App\State $state)
+    {
         $this->state = $state;
         parent::__construct();
     }
@@ -50,6 +52,11 @@ class Indexer extends Command
                 self::DELETE,
                 null,
                 InputOption::VALUE_OPTIONAL
+            ),
+            new InputOption(
+                self::STORE,
+                null,
+                InputOption::VALUE_OPTIONAL
             )
         ];
 
@@ -64,21 +71,24 @@ class Indexer extends Command
     {
         $this->state->setAreaCode(\Magento\Framework\App\Area::AREA_GLOBAL);
 
-        if($input->getOption(self::NAME) != null) {
-            $productIds = $input->getOption(self::NAME);
-
-            if($productIds)
-                $this->indexSingleProduct($productIds);
+        if ($input->getOption(self::STORE) == null) {
+            echo "Store ID can not be empty";
+            exit;
         }
 
-        else if($input->getOption(self::DELETE) != null) {
+        $this->storeId = $input->getOption(self::STORE);
+
+        if ($input->getOption(self::NAME) != null) {
+            $productIds = $input->getOption(self::NAME);
+
+            if ($productIds)
+                $this->indexSingleProduct($productIds);
+        } else if ($input->getOption(self::DELETE) != null) {
             $this->getStoreDetails();
             $productIds = explode(",", $input->getOption(self::DELETE));
             $st = new SearchTapAPI();
             $st->searchtapCurlDeleteRequest($productIds, $this->collectionName, $this->adminKey);
-        }
-
-        else $this->indexProducts();
+        } else $this->indexProducts();
 
     }
 
@@ -87,20 +97,21 @@ class Indexer extends Command
         $this->cert_path = BP . '/app/code/Gs/Searchtap/gs_cert/searchtap.io.crt';
         $this->product_visibility_array = array('1' => 'Not Visible Individually', '2' => 'Catalog', '3' => 'Search', '4' => 'Catalog,Search');
         $this->objectManager = \Magento\Framework\App\ObjectManager::getInstance();
-        $this->storeId = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_store');
-        $this->imageWidth = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/image/st_image_width');
-        $this->imageHeight = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/image/st_image_height');
-        $this->collectionName = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_collection');
-        $this->adminKey = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_admin_key');
-        $this->applicationId = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_application_id');
-        $this->selectedAttributes = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/attributes/additional_attributes');
+//        $s = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_store');
+        $this->imageWidth = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/image/st_image_width', $this->storeId);
+        $this->imageHeight = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/image/st_image_height', $this->storeId);
+        $this->collectionName = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_collection', $this->storeId);
+        $this->adminKey = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_admin_key', $this->storeId);
+        $this->applicationId = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_application_id', $this->storeId);
+        $this->selectedAttributes = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/attributes/additional_attributes', $this->storeId);
     }
 
 //    public function initializeSearchtap () {
 //        $st = new SearchTapClient($this->collectionName, $this->adminKey);
 //    }
 
-    public function indexSingleProduct($ids) {
+    public function indexSingleProduct($ids)
+    {
 
         echo 'Start Indexing';
         $productIds = explode(",", $ids);
@@ -119,8 +130,14 @@ class Indexer extends Command
 
     public function indexProducts()
     {
-        echo 'Indexer started';
         $this->getStoreDetails();
+
+        $storeManager = $this->objectManager->get('\Magento\Store\Model\StoreManagerInterface');
+        $stores = $storeManager->getStores(true, false);
+        foreach ($stores as $store) {
+            if ($this->storeId == $store->getId())
+                echo 'Indexer started for ' . $store->getName() . "\n";
+        }
 
         $writer = new \Zend\Log\Writer\Stream(BP . '/var/log/searchtap.log');
         $this->logger = new \Zend\Log\Logger();
@@ -296,6 +313,9 @@ class Indexer extends Command
         $this->logger = new \Zend\Log\Logger();
         $this->logger->addWriter($writer);
 
+        $emulator = $this->objectManager->create('Magento\Store\Model\App\Emulation');
+        $emulator->startEnvironmentEmulation($this->storeId, \Magento\Framework\App\Area::AREA_FRONTEND, true);
+
         $productId = $product->getId();
         $productName = html_entity_decode($product->getName());
         $productSKU = $product->getSKU();
@@ -349,7 +369,7 @@ class Indexer extends Command
                     $option[$p['sku']]['stock_qty'] = $childStock->getQty();
                     $option[$p['sku']]['in_stock'] = $childStock->getIsInStock();
 
-                    if($option[$p['sku']]['in_stock'] && $option[$p['sku']]['stock_qty'] > 0)
+                    if ($option[$p['sku']]['in_stock'] && $option[$p['sku']]['stock_qty'] > 0)
                         $configurableAttributes['_' . $p['attribute_code']][] = $p['option_title'];
 
                 }
@@ -370,16 +390,11 @@ class Indexer extends Command
         $productSmallImage = $store->getBaseUrl(\Magento\Framework\UrlInterface::URL_TYPE_MEDIA) . 'catalog/product' . $product->getSmallImage();
         $productThumbnailImage = $store->getBaseUrl(\Magento\Framework\UrlInterface::URL_TYPE_MEDIA) . 'catalog/product' . $product->getThumbnail();
 
-        $emulator = $this->objectManager->create('Magento\Store\Model\App\Emulation');
-        $emulator->startEnvironmentEmulation($this->storeId, \Magento\Framework\App\Area::AREA_FRONTEND, true);
-
         $image_helper = $this->objectManager->create('Magento\Catalog\Helper\ImageFactory');
-        $image = $image_helper->create()->init($product,'category_page_list')->resize($this->imageWidth, $this->imageHeight)->getUrl();
-        $thubnail_cache_image = $image_helper->create()->init($product,'product_thumbnail_image')->resize($this->imageWidth, $this->imageHeight)->getUrl();
-        $small_cache_image = $image_helper->create()->init($product,'product_small_image')->resize($this->imageWidth, $this->imageHeight)->getUrl();
-        $base_cache_image = $image_helper->create()->init($product,'product_base_image')->resize($this->imageWidth, $this->imageHeight)->getUrl();
-
-        $emulator->stopEnvironmentEmulation();
+        $image = $image_helper->create()->init($product, 'category_page_list')->resize($this->imageWidth, $this->imageHeight)->getUrl();
+        $thubnail_cache_image = $image_helper->create()->init($product, 'product_thumbnail_image')->resize($this->imageWidth, $this->imageHeight)->getUrl();
+        $small_cache_image = $image_helper->create()->init($product, 'product_small_image')->resize($this->imageWidth, $this->imageHeight)->getUrl();
+        $base_cache_image = $image_helper->create()->init($product, 'product_base_image')->resize($this->imageWidth, $this->imageHeight)->getUrl();
 
         //get currency code and symbol
         $currencyCode = $store->getCurrentCurrencyCode();
@@ -411,8 +426,8 @@ class Indexer extends Command
             $row = 0;
             foreach ($collection_cat as $cat) {
                 if (!$cat->hasChildren()) {
-                    if(!in_array($cat->getName(), $_categories))
-                        if($cat->getIsActive()) {
+                    if (!in_array($cat->getName(), $_categories))
+                        if ($cat->getIsActive()) {
                             $_categories[] = htmlspecialchars_decode($cat->getName());
                         }
                 }
@@ -432,7 +447,7 @@ class Indexer extends Command
                             $pathByName .= '|||' . $path_name[$j][1];
                         }
 
-                        if($path_name[$j][2]) {
+                        if ($path_name[$j][2]) {
                             if (!isset($catlevelArray['_category_level_' . $level])) {
                                 $catlevelArray['_category_level_' . $level][] = $path_name[$j][1];
                             }
@@ -452,16 +467,18 @@ class Indexer extends Command
         $customAttributes = array();
 
         foreach ($selected as $attr) {
-
             $value = $product->hasData($attr);
             if ($value) {
                 if ($product->getResource()->getAttribute($attr)->getFrontendInput() == 'multiselect') {
                     $explodeAttrs = explode(',', $product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
                     $customAttributes[$attr] = array_map("htmlspecialchars_decode", $explodeAttrs);
-                } else
+                } else {
                     $customAttributes[$attr] = htmlspecialchars_decode($product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
+                }
             }
         }
+
+        $emulator->stopEnvironmentEmulation();
 
         //print_r($customAttributes);
 
