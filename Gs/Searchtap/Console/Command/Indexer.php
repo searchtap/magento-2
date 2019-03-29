@@ -473,8 +473,10 @@ class Indexer extends Command
                     $explodeAttrs = explode(',', $product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
                     $customAttributes[$attr] = array_map("htmlspecialchars_decode", $explodeAttrs);
                 } else {
-                    $customAttributes[$attr] = htmlspecialchars_decode($product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
-                }
+                     $attribute_value = $product->getData($attr);
+                     if($attribute_value)
+                     $customAttributes[$attr] = htmlspecialchars_decode($product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
+               }
             }
         }
 
