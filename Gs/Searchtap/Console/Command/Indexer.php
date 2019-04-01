@@ -475,7 +475,7 @@ class Indexer extends Command
                 } else {
                      $attribute_value = $product->getData($attr);
                      if($attribute_value)
-                     $customAttributes[$attr] = htmlspecialchars_decode($product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
+                        $customAttributes[$attr] = htmlspecialchars_decode($attribute_value);
                }
             }
         }
