@@ -42,6 +42,8 @@ class Indexer extends Command
 
     protected function configure()
     {
+        error_reporting(0);
+
         $options = [
             new InputOption(
                 self::NAME,
@@ -407,6 +409,8 @@ class Indexer extends Command
 
         $categories = $product->getCategoryCollection()
             ->setStoreId($this->storeId)
+            ->addAttributeToFilter('is_active', true)
+            ->addAttributeToFilter('include_in_menu', true)
             ->addAttributeToSelect('path');
 
         foreach ($categories as $cat1) {
@@ -418,7 +422,7 @@ class Indexer extends Command
             $collection_cat = $categoryFactory->create()
                 ->addAttributeToSelect('*')
                 ->setStoreId($this->storeId)
-                ->addFieldToFilter('entity_id', array('in' => $pathIds));;
+                ->addFieldToFilter('entity_id', array('in' => $pathIds));
 
             $pathByName = '';
             $level = 1;
@@ -427,13 +431,11 @@ class Indexer extends Command
             foreach ($collection_cat as $cat) {
                 if (!$cat->hasChildren()) {
                     if (!in_array($cat->getName(), $_categories))
-                        if ($cat->getIsActive()) {
-                            $_categories[] = htmlspecialchars_decode($cat->getName());
-                        }
+                        $_categories[] = htmlspecialchars_decode($cat->getName());
                 }
+
                 $path_name[$row][0] = $cat->getId();
-                $path_name[$row][1] = htmlspecialchars_decode($cat->getName());
-                $path_name[$row][2] = $cat->getIsActive();
+                $path_name[$row][1] = trim(htmlspecialchars_decode($cat->getName()));
 
                 $row++;
             }
@@ -447,16 +449,14 @@ class Indexer extends Command
                             $pathByName .= '|||' . $path_name[$j][1];
                         }
 
-                        if ($path_name[$j][2]) {
-                            if (!isset($catlevelArray['_category_level_' . $level])) {
-                                $catlevelArray['_category_level_' . $level][] = $path_name[$j][1];
-                            }
-                        }
+                        if (!in_array($path_name[$j][1], $catlevelArray['_category_level_' . $level]))
+                            $catlevelArray['_category_level_' . $level][] = $path_name[$j][1];
                     }
                 }
-                if (!isset($catpathArray['categories_level_' . $level])) {
+
+                if (!in_array($pathByName, $catpathArray['categories_level_' . $level]))
                     $catpathArray['categories_level_' . $level][] = $pathByName;
-                }
+
                 $level++;
             }
         }
@@ -473,10 +473,10 @@ class Indexer extends Command
                     $explodeAttrs = explode(',', $product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
                     $customAttributes[$attr] = array_map("htmlspecialchars_decode", $explodeAttrs);
                 } else {
-                     $attribute_value = $product->getData($attr);
-                     if($attribute_value)
-                       $customAttributes[$attr] = htmlspecialchars_decode($product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
-               }
+                    $attribute_value = $product->getData($attr);
+                    if ($attribute_value)
+                        $customAttributes[$attr] = htmlspecialchars_decode($product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
+                }
             }
         }
 
