@@ -410,7 +410,8 @@ class Indexer extends Command
         $categories = $product->getCategoryCollection()
             ->setStoreId($this->storeId)
             ->addAttributeToFilter('is_active', true)
-            ->addAttributeToFilter('include_in_menu', true)
+            ->addAttributeToFilter('include_in_menu', array('eq' => 1))
+            ->addAttributeToFilter('path', array('nlike' => '%743%'))
             ->addAttributeToSelect('path');
 
         foreach ($categories as $cat1) {
@@ -434,8 +435,13 @@ class Indexer extends Command
                         $_categories[] = htmlspecialchars_decode($cat->getName());
                 }
 
+                if(!$cat->getIncludeInMenu())
+                    continue 2;
+
                 $path_name[$row][0] = $cat->getId();
                 $path_name[$row][1] = trim(htmlspecialchars_decode($cat->getName()));
+                $path_name[$row][2] = trim(htmlspecialchars_decode($cat->getIncludeInMenu()));
+
 
                 $row++;
             }
