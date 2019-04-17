@@ -68,6 +68,24 @@
                 </field>
             </group>
 
+            <group id="categories" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1"
+                   showInStore="1">
+                <label>Categories</label>
+
+                <field id="st_categories_menu" translate="label" type="select" sortOrder="80" showInDefault="1"
+                       showInWebsite="1" showInStore="1">
+                    <label>Include In Menu</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <validate>required-entry</validate>
+                </field>
+
+                <field id="st_categories_ignore" translate="label" type="text" sortOrder="80" showInDefault="1"
+                       showInWebsite="1" showInStore="1">
+                    <label>Skip Categories In Filter</label>
+                    <comment>Add the comma separated category IDs that need to skip in filters</comment>
+                </field>
+            </group>
+
             <group id="st_template" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1"
                    showInStore="1">
                 <label>Add Template</label>
