@@ -32,11 +32,11 @@
                     <validate>required-entry</validate>
                     <comment>Get the admin from searchtap dashboard.</comment>
                 </field>
-                <field id="st_search_key" translate="label" type="text" sortOrder="1" showInDefault="1"
+                <field id="st_application_id" translate="label" type="text" sortOrder="1" showInDefault="1"
                        showInWebsite="1" showInStore="1">
-                    <label>Search Key</label>
+                    <label>Application ID</label>
                     <validate>required-entry</validate>
-                    <comment>Get the search key from searchtap dashboard.</comment>
+                    <comment>Get the application id from searchtap dashboard.</comment>
                 </field>
             </group>
 
@@ -84,24 +84,6 @@
                     <label>Skip Categories In Filter</label>
                     <comment>Add the comma separated category IDs that need to skip in filters</comment>
                 </field>
-            </group>
-
-            <group id="st_discount" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="1"
-                   showInStore="1">
-                <label>Discount Filter</label>
-
-                <field id="st_discount_enabled" translate="label" type="select" sortOrder="80" showInDefault="1"
-                       showInWebsite="1" showInStore="1">
-                    <label>Enabled</label>
-                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
-                    <validate>required-entry</validate>
-                </field>
-
-<!--                <field id="st_discount_range" translate="label" type="select" sortOrder="80" showInDefault="1" showInWebsite="1"-->
-<!--                       showInStore="1">-->
-<!--                    <label>Discount Range</label>-->
-<!--                    <source_model>Gs\Searchtap\Model\Config\Source\GetDiscountRange</source_model>-->
-<!--                </field>-->
             </group>
 
             <group id="st_template" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1"

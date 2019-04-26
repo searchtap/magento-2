@@ -31,12 +31,11 @@ class Indexer extends Command
     public $categoryIncludeInMenu = 0;
     public $skipCategoryIds;
     protected $product_visibility_array = array('1' => 'Not Visible Individually', '2' => 'Catalog', '3' => 'Search', '4' => 'Catalog,Search');
-    public $discountFilterEnabled;
-    public $discountRange;
 
     const NAME = 'p';
     const DELETE = 'd';
     const STORE = 's';
+    const DELETE_FULL_SYNC = 'f';
 
     public function __construct(\Magento\Framework\App\State $state)
     {
@@ -63,6 +62,11 @@ class Indexer extends Command
                 self::STORE,
                 null,
                 InputOption::VALUE_OPTIONAL
+            ),
+            new InputOption(
+                self::DELETE_FULL_SYNC,
+                null,
+                InputOption::VALUE_OPTIONAL
             )
         ];
 
@@ -86,7 +90,6 @@ class Indexer extends Command
 
         if ($input->getOption(self::NAME) != null) {
             $productIds = $input->getOption(self::NAME);
-
             if ($productIds)
                 $this->indexSingleProduct($productIds);
         } else if ($input->getOption(self::DELETE) != null) {
@@ -94,8 +97,15 @@ class Indexer extends Command
             $productIds = explode(",", $input->getOption(self::DELETE));
             $st = new SearchTapAPI();
             $st->searchtapCurlDeleteRequest($productIds, $this->collectionName, $this->adminKey);
-        } else $this->indexProducts();
-
+        }
+        else if ($input->getOption(self::DELETE_FULL_SYNC) != null) {
+            $this->getStoreDetails();
+            $this->deleteFullSync($this->storeId);
+        }
+        else {
+            $this->indexProducts();
+            $this->deleteFullSync($this->storeId);
+        }
     }
 
     public function getStoreDetails()
@@ -103,7 +113,6 @@ class Indexer extends Command
         $this->cert_path = BP . '/app/code/Gs/Searchtap/gs_cert/searchtap.io.crt';
         $this->product_visibility_array = array('1' => 'Not Visible Individually', '2' => 'Catalog', '3' => 'Search', '4' => 'Catalog,Search');
         $this->objectManager = \Magento\Framework\App\ObjectManager::getInstance();
-//        $s = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_store');
         $this->imageWidth = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/image/st_image_width', $this->storeId);
         $this->imageHeight = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/image/st_image_height', $this->storeId);
         $this->collectionName = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_collection', $this->storeId);
@@ -112,8 +121,6 @@ class Indexer extends Command
         $this->selectedAttributes = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/attributes/additional_attributes', $this->storeId);
         $this->categoryIncludeInMenu = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/categories/st_categories_menu', $this->storeId);
         $this->skipCategoryIds = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/categories/st_categories_ignore', $this->storeId);
-        $this->discountFilterEnabled = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/st_discount/st_discount_enabled', $this->storeId);
-//        $this->discountRange = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/st_discount/st_discount_range', $this->storeId);
     }
 
 //    public function initializeSearchtap () {
@@ -333,9 +340,9 @@ class Indexer extends Command
 
         $productVisibility = $this->product_visibility_array[$product->getVisibility()];
         $productURL = $product->getProductUrl();
-        $productPrice = (float)$product->getPriceInfo()->getPrice('regular_price')->getAmount()->getValue();
+        $productPrice = $product->getPriceInfo()->getPrice('regular_price')->getAmount()->getValue();
 
-        $productSpecialPrice = (float)$product->getFinalPrice();
+        $productSpecialPrice = $product->getFinalPrice();
         $productCreatedAt = strtotime($product->getCreatedAt());
         $productType = $product->getTypeId();
 
@@ -503,8 +510,6 @@ class Indexer extends Command
 
         $emulator->stopEnvironmentEmulation();
 
-        //print_r($customAttributes);
-
         $productArray = array(
             'id' => (int)$productId,
             'name' => $productName,
@@ -512,8 +517,8 @@ class Indexer extends Command
             'status' => (int)$productStatus,
             'visibility' => $productVisibility,
             'url' => $productURL,
-            'price' => $productPrice,
-            'discounted_price' => $productSpecialPrice,
+            'price' => (float)$productPrice,
+            'discounted_price' => (float)$productSpecialPrice,
             'created_date' => $productCreatedAt,
             'product_type' => $productType,
             'stock_qty' => $productStockQty,
@@ -532,17 +537,150 @@ class Indexer extends Command
             'base_cache_image' => $base_cache_image
         );
 
-        //calculate discount percentage for discount filter
-        if ($this->discountFilterEnabled) {
-            if($productPrice) {
-                $discount_percentage = (($productPrice - $productSpecialPrice) / $productPrice) * 100;
-                $productArray['discount_percentage'] = round($discount_percentage);
-            }
-        }
-
         $array = array_merge($productArray, $catpathArray, $catlevelArray, $customAttributes, $configurableAttributes);
 
         return $array;
+    }
+
+    public function getProductCollection($storeId) {
+        $productIds = array();
+
+        $productCollection = $this->objectManager->create('Magento\Catalog\Model\ResourceModel\Product\CollectionFactory');
+
+        $collection = $productCollection->create()
+            ->addStoreFilter($storeId)
+            ->addAttributeToFilter('status', array('eq' => 1));
+
+        $collection->getSelect()->joinLeft(array(
+            'link_table' => 'catalog_product_super_link'),
+            'link_table.product_id = e.entity_id',
+            array('product_id')
+        );
+
+        $collection->getSelect()->where('link_table.product_id IS NULL');
+
+        $collection->load();
+
+        foreach ($collection as $product)
+            $productIds[] = $product->getId();
+
+        return $productIds;
+    }
+
+    public function deleteFullSync($storeId)
+    {
+        $count = 1000;
+        $skip = 0;
+        $counter = 0;
+        $productIds = array();
+//        $this->setSearchTapCollection($storeId);
+        $dbIds = $this->getProductCollection($storeId);
+
+        var_dump($dbIds);
+        foreach ($this->searchtapCurlSearchRequest($count, $skip) as $object) {
+            $productIds[] = $object->id;
+            $counter++;
+            if ($counter === $count) {
+                $idsToBeDeleted = array_values(array_diff($productIds, $dbIds));
+                if (count($idsToBeDeleted) > 0)
+                    $this->deleteInactiveProducts($idsToBeDeleted);
+                $counter = 0;
+                unset($productIds);
+            }
+            $skip += $count;
+        }
+        if (count($productIds) > 0) {
+            $idsToBeDeleted = array_values(array_diff($productIds, $dbIds));
+            if (count($idsToBeDeleted) > 0)
+                $this->deleteInactiveProducts($idsToBeDeleted);
+        }
+        //check if there is any product ID in queue that need to be deleted
+//        $this->checkQueueForDelete();
+    }
+
+    public function deleteInactiveProducts($idsToBeDeleted)
+    {
+        $responseHttpCode = $this->searchtapCurlDeleteRequest($idsToBeDeleted);
+//        if ($responseHttpCode != 200) {
+//            $queue = Mage::getModel('gs_searchtap/queue');
+//            foreach ($idsToBeDeleted as $id) {
+//                $data = array(
+//                    'entity_id' => $id,
+//                    'action' => 'delete'
+//                );
+//                $queue->setData($data)->save();
+//            }
+//        }
+        return $responseHttpCode;
+    }
+
+    public function checkQueueForDelete()
+    {
+        $queue = Mage::getModel('gs_searchtap/queue')
+            ->getCollection()
+            ->addFieldToFilter('action', array('eq' => "delete"));
+        if ($queue->getSize()) {
+            $idsToBeDeleted = array();
+            foreach ($queue as $item)
+                $idsToBeDeleted[] = $item->getData('entity_id');
+            $responseHttpCode = $this->deleteInactiveProducts($idsToBeDeleted);
+            if ($responseHttpCode == 200) {
+                foreach ($queue as $item)
+                    $item->delete();
+            }
+        }
+    }
+
+    public function searchtapCurlSearchRequest($count, $skip)
+    {
+        $writer = new \Zend\Log\Writer\Stream(BP . '/var/log/searchtap.log');
+        $this->logger = new \Zend\Log\Logger();
+        $this->logger->addWriter($writer);
+
+        $data = json_encode(array(
+            'collection' => $this->collectionName,
+            'fields' => ["id"],
+            'count' => $count,
+            'skip' => $skip
+        ));
+
+        echo $this->applicationId . " " . $this->$this->collectionName . " " . $this->adminKey;
+
+        try {
+            $curl = curl_init();
+            curl_setopt_array($curl, array(
+                CURLOPT_URL => "https://" . $this->applicationId . "-fast.searchtap.net/v2",
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => 2,
+                CURLOPT_CAINFO => '',
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_ENCODING => "",
+                CURLOPT_MAXREDIRS => 10,
+                CURLOPT_TIMEOUT => 30,
+                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+                CURLOPT_CUSTOMREQUEST => "POST",
+                CURLOPT_POSTFIELDS => $data,
+                CURLOPT_HTTPHEADER => array(
+                    "cache-control: no-cache",
+                    "content-type: application/json",
+                    "Authorization:  Bearer " . $this->adminKey
+                ),
+            ));
+            $result = curl_exec($curl);
+            $responseHttpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+            $err = curl_error($curl);
+            curl_close($curl);
+
+            $this->logger->info("Search API Response : " . $responseHttpCode);
+
+            if ($responseHttpCode != 200) {
+                $this->logger->info("Search API is not working : " . $responseHttpCode . " " . json_encode($err));
+                exit;
+            }
+            return (json_decode($result)->results);
+        } catch (error $error) {
+            $this->logger->info($error);
+        }
     }
 }
 
