@@ -31,6 +31,8 @@ class Indexer extends Command
     public $categoryIncludeInMenu = 0;
     public $skipCategoryIds;
     protected $product_visibility_array = array('1' => 'Not Visible Individually', '2' => 'Catalog', '3' => 'Search', '4' => 'Catalog,Search');
+    public $discountFilterEnabled;
+    public $discountRange;
 
     const NAME = 'p';
     const DELETE = 'd';
@@ -110,6 +112,8 @@ class Indexer extends Command
         $this->selectedAttributes = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/attributes/additional_attributes', $this->storeId);
         $this->categoryIncludeInMenu = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/categories/st_categories_menu', $this->storeId);
         $this->skipCategoryIds = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/categories/st_categories_ignore', $this->storeId);
+        $this->discountFilterEnabled = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/st_discount/st_discount_enabled', $this->storeId);
+//        $this->discountRange = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/st_discount/st_discount_range', $this->storeId);
     }
 
 //    public function initializeSearchtap () {
@@ -329,9 +333,9 @@ class Indexer extends Command
 
         $productVisibility = $this->product_visibility_array[$product->getVisibility()];
         $productURL = $product->getProductUrl();
-        $productPrice = $product->getPriceInfo()->getPrice('regular_price')->getAmount()->getValue();
+        $productPrice = (float)$product->getPriceInfo()->getPrice('regular_price')->getAmount()->getValue();
 
-        $productSpecialPrice = $product->getFinalPrice();
+        $productSpecialPrice = (float)$product->getFinalPrice();
         $productCreatedAt = strtotime($product->getCreatedAt());
         $productType = $product->getTypeId();
 
@@ -508,8 +512,8 @@ class Indexer extends Command
             'status' => (int)$productStatus,
             'visibility' => $productVisibility,
             'url' => $productURL,
-            'price' => (float)$productPrice,
-            'discounted_price' => (float)$productSpecialPrice,
+            'price' => $productPrice,
+            'discounted_price' => $productSpecialPrice,
             'created_date' => $productCreatedAt,
             'product_type' => $productType,
             'stock_qty' => $productStockQty,
@@ -527,6 +531,14 @@ class Indexer extends Command
             'small_cache_image' => $small_cache_image,
             'base_cache_image' => $base_cache_image
         );
+
+        //calculate discount percentage for discount filter
+        if ($this->discountFilterEnabled) {
+            if($productPrice) {
+                $discount_percentage = (($productPrice - $productSpecialPrice) / $productPrice) * 100;
+                $productArray['discount_percentage'] = round($discount_percentage);
+            }
+        }
 
         $array = array_merge($productArray, $catpathArray, $catlevelArray, $customAttributes, $configurableAttributes);
 

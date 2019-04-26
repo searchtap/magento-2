@@ -86,6 +86,24 @@
                 </field>
             </group>
 
+            <group id="st_discount" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="1"
+                   showInStore="1">
+                <label>Discount Filter</label>
+
+                <field id="st_discount_enabled" translate="label" type="select" sortOrder="80" showInDefault="1"
+                       showInWebsite="1" showInStore="1">
+                    <label>Enabled</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <validate>required-entry</validate>
+                </field>
+
+<!--                <field id="st_discount_range" translate="label" type="select" sortOrder="80" showInDefault="1" showInWebsite="1"-->
+<!--                       showInStore="1">-->
+<!--                    <label>Discount Range</label>-->
+<!--                    <source_model>Gs\Searchtap\Model\Config\Source\GetDiscountRange</source_model>-->
+<!--                </field>-->
+            </group>
+
             <group id="st_template" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1"
                    showInStore="1">
                 <label>Add Template</label>
