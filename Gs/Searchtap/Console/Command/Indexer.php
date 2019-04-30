@@ -576,7 +576,6 @@ class Indexer extends Command
 //        $this->setSearchTapCollection($storeId);
         $dbIds = $this->getProductCollection($storeId);
 
-        var_dump($dbIds);
         foreach ($this->searchtapCurlSearchRequest($count, $skip) as $object) {
             $productIds[] = $object->id;
             $counter++;
@@ -591,6 +590,8 @@ class Indexer extends Command
         }
         if (count($productIds) > 0) {
             $idsToBeDeleted = array_values(array_diff($productIds, $dbIds));
+            echo "ids to be deleted \n";
+            var_dump($idsToBeDeleted);
             if (count($idsToBeDeleted) > 0)
                 $this->deleteInactiveProducts($idsToBeDeleted);
         }
