@@ -568,7 +568,7 @@ class Indexer extends Command
 
     public function deleteFullSync($storeId)
     {
-        $count = 10;
+        $count = 1000;
         $skip = 0;
         $productIds = array();
 
