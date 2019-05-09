@@ -31,6 +31,7 @@ class Indexer extends Command
     public $categoryIncludeInMenu = 0;
     public $skipCategoryIds;
     protected $product_visibility_array = array('1' => 'Not Visible Individually', '2' => 'Catalog', '3' => 'Search', '4' => 'Catalog,Search');
+    private $st;
 
     const NAME = 'p';
     const DELETE = 'd';
@@ -95,14 +96,11 @@ class Indexer extends Command
         } else if ($input->getOption(self::DELETE) != null) {
             $this->getStoreDetails();
             $productIds = explode(",", $input->getOption(self::DELETE));
-            $st = new SearchTapAPI();
-            $st->searchtapCurlDeleteRequest($productIds, $this->collectionName, $this->adminKey);
-        }
-        else if ($input->getOption(self::DELETE_FULL_SYNC) != null) {
+            $this->st->searchtapCurlDeleteRequest($productIds);
+        } else if ($input->getOption(self::DELETE_FULL_SYNC) != null) {
             $this->getStoreDetails();
             $this->deleteFullSync($this->storeId);
-        }
-        else {
+        } else {
             $this->indexProducts();
             $this->deleteFullSync($this->storeId);
         }
@@ -121,6 +119,8 @@ class Indexer extends Command
         $this->selectedAttributes = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/attributes/additional_attributes', $this->storeId);
         $this->categoryIncludeInMenu = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/categories/st_categories_menu', $this->storeId);
         $this->skipCategoryIds = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/categories/st_categories_ignore', $this->storeId);
+
+        $this->st = new SearchTapAPI($this->applicationId, $this->collectionName, $this->adminKey);
     }
 
 //    public function initializeSearchtap () {
@@ -129,7 +129,6 @@ class Indexer extends Command
 
     public function indexSingleProduct($ids)
     {
-
         echo 'Start Indexing';
         $productIds = explode(",", $ids);
 
@@ -251,8 +250,7 @@ class Indexer extends Command
                 $productIds[] = $product->getId();
             }
 
-            $st = new SearchTapAPI();
-            $st->searchtapCurlDeleteRequest($productIds, $this->collectionName, $this->adminKey);
+            $this->st->searchtapCurlDeleteRequest($productIds);
 
             $i += $productSteps;
 
@@ -318,8 +316,7 @@ class Indexer extends Command
 
         unset($product_array);
 
-        $st = new SearchTapAPI();
-        $st->searchtapCurlRequest($product_json, $this->collectionName, $this->adminKey);
+        $this->st->searchtapCurlRequest($product_json);
 
         unset($product_json);
     }
@@ -542,13 +539,15 @@ class Indexer extends Command
         return $array;
     }
 
-    public function getProductCollection($storeId) {
+    public function getProductCollection($storeId)
+    {
         $productIds = array();
 
         $productCollection = $this->objectManager->create('Magento\Catalog\Model\ResourceModel\Product\CollectionFactory');
 
         $collection = $productCollection->create()
             ->addStoreFilter($storeId)
+            ->addAttributeToSelect('entity_id')
             ->addAttributeToFilter('status', array('eq' => 1));
 
         $collection->getSelect()->joinLeft(array(
@@ -569,118 +568,76 @@ class Indexer extends Command
 
     public function deleteFullSync($storeId)
     {
-        $count = 1000;
+        $count = 10;
         $skip = 0;
-        $counter = 0;
         $productIds = array();
-//        $this->setSearchTapCollection($storeId);
+
         $dbIds = $this->getProductCollection($storeId);
 
-        foreach ($this->searchtapCurlSearchRequest($count, $skip) as $object) {
-            $productIds[] = $object->id;
-            $counter++;
-            if ($counter === $count) {
-                $idsToBeDeleted = array_values(array_diff($productIds, $dbIds));
-                if (count($idsToBeDeleted) > 0)
-                    $this->deleteInactiveProducts($idsToBeDeleted);
-                $counter = 0;
-                unset($productIds);
+        while (true) {
+            $results = $this->st->searchtapCurlSearchRequest($count, $skip);
+            if (!$results) break;
+
+            foreach ($results as $object) {
+                $productIds[] = $object->id;
             }
-            $skip += $count;
-        }
-        if (count($productIds) > 0) {
+
             $idsToBeDeleted = array_values(array_diff($productIds, $dbIds));
-            echo "ids to be deleted \n";
-            var_dump($idsToBeDeleted);
             if (count($idsToBeDeleted) > 0)
                 $this->deleteInactiveProducts($idsToBeDeleted);
+
+            unset($productIds);
+            $skip += $count;
         }
         //check if there is any product ID in queue that need to be deleted
-//        $this->checkQueueForDelete();
+        $this->checkQueueForDelete();
     }
 
     public function deleteInactiveProducts($idsToBeDeleted)
     {
-        $responseHttpCode = $this->searchtapCurlDeleteRequest($idsToBeDeleted);
-//        if ($responseHttpCode != 200) {
-//            $queue = Mage::getModel('gs_searchtap/queue');
-//            foreach ($idsToBeDeleted as $id) {
-//                $data = array(
-//                    'entity_id' => $id,
-//                    'action' => 'delete'
-//                );
-//                $queue->setData($data)->save();
-//            }
-//        }
-        return $responseHttpCode;
+        date_default_timezone_set('Asia/Kolkata');
+        $date = date('Y-m-d H:i:s');
+
+        $response = $this->st->searchtapCurlDeleteRequest($idsToBeDeleted);
+        if ($response["responseHttpCode"] != 200) {
+            try {
+                $model = $this->objectManager->create('Gs\Searchtap\Model\Queue');
+
+                foreach ($idsToBeDeleted as $id) {
+                    $data = array(
+                        'product_id' => $id,
+                        'action' => 'delete',
+                        'last_sent_at' => $date
+                    );
+
+                    $model->setData($data)->save();
+                }
+
+            } catch (error $error) {
+                $this->logger->info($error);
+            }
+        }
+        return $response;
     }
 
     public function checkQueueForDelete()
     {
-        $queue = Mage::getModel('gs_searchtap/queue')
-            ->getCollection()
-            ->addFieldToFilter('action', array('eq' => "delete"));
-        if ($queue->getSize()) {
-            $idsToBeDeleted = array();
-            foreach ($queue as $item)
-                $idsToBeDeleted[] = $item->getData('entity_id');
-            $responseHttpCode = $this->deleteInactiveProducts($idsToBeDeleted);
-            if ($responseHttpCode == 200) {
-                foreach ($queue as $item)
-                    $item->delete();
-            }
+        $idsToBeDeleted = array();
+        $model = $this->objectManager->create('Gs\Searchtap\Model\Queue');
+        $collection = $model->getCollection()
+            ->addFieldToSelect('product_id')
+            ->addFieldToFilter('action', array('eq' => 'delete'));
+
+        foreach ($collection as $entity) {
+            $idsToBeDeleted[] = $entity->getId();
         }
-    }
 
-    public function searchtapCurlSearchRequest($count, $skip)
-    {
-        $writer = new \Zend\Log\Writer\Stream(BP . '/var/log/searchtap.log');
-        $this->logger = new \Zend\Log\Logger();
-        $this->logger->addWriter($writer);
-
-        $data = json_encode(array(
-            'collection' => $this->collectionName,
-            'fields' => ["id"],
-            'count' => $count,
-            'skip' => $skip
-        ));
-
-        echo $this->applicationId . " " . $this->$this->collectionName . " " . $this->adminKey;
-
-        try {
-            $curl = curl_init();
-            curl_setopt_array($curl, array(
-                CURLOPT_URL => "https://" . $this->applicationId . "-fast.searchtap.net/v2",
-                CURLOPT_SSL_VERIFYPEER => false,
-                CURLOPT_SSL_VERIFYHOST => 2,
-                CURLOPT_CAINFO => '',
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_ENCODING => "",
-                CURLOPT_MAXREDIRS => 10,
-                CURLOPT_TIMEOUT => 30,
-                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-                CURLOPT_CUSTOMREQUEST => "POST",
-                CURLOPT_POSTFIELDS => $data,
-                CURLOPT_HTTPHEADER => array(
-                    "cache-control: no-cache",
-                    "content-type: application/json",
-                    "Authorization:  Bearer " . $this->adminKey
-                ),
-            ));
-            $result = curl_exec($curl);
-            $responseHttpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-            $err = curl_error($curl);
-            curl_close($curl);
-
-            $this->logger->info("Search API Response : " . $responseHttpCode);
-
-            if ($responseHttpCode != 200) {
-                $this->logger->info("Search API is not working : " . $responseHttpCode . " " . json_encode($err));
-                exit;
+        if(count($idsToBeDeleted) > 0) {
+            $response = $this->deleteInactiveProducts($idsToBeDeleted);
+            if ($response["responseHttpCode"] == 200) {
+                foreach ($collection as $entity)
+                    $entity->delete();
             }
-            return (json_decode($result)->results);
-        } catch (error $error) {
-            $this->logger->info($error);
         }
     }
 }

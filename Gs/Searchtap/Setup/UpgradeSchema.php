@@ -18,7 +18,7 @@ class UpgradeSchema implements UpgradeSchemaInterface
                     'product_id',
                     \Magento\Framework\DB\Ddl\Table::TYPE_INTEGER,
                     null,
-                    ['identity' => true, 'unsigned' => true, 'nullable' => false, 'primary' => true],
+                    ['nullable' => false, 'primary' => true],
                     'Product ID'
                 )
                 ->addColumn(
@@ -31,7 +31,7 @@ class UpgradeSchema implements UpgradeSchemaInterface
                 )
                 ->addColumn(
                     'last_sent_at',
-                    \Magento\Framework\DB\Ddl\Table::TYPE_TIMESTAMP,
+                    \Magento\Framework\DB\Ddl\Table::TYPE_DATETIME,
                     null,
                     [],
                     'Last Sent At'
