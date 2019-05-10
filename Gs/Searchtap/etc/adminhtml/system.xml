@@ -32,11 +32,11 @@
                     <validate>required-entry</validate>
                     <comment>Get the admin from searchtap dashboard.</comment>
                 </field>
-                <field id="st_search_key" translate="label" type="text" sortOrder="1" showInDefault="1"
+                <field id="st_application_id" translate="label" type="text" sortOrder="1" showInDefault="1"
                        showInWebsite="1" showInStore="1">
-                    <label>Search Key</label>
+                    <label>Application ID</label>
                     <validate>required-entry</validate>
-                    <comment>Get the search key from searchtap dashboard.</comment>
+                    <comment>Get the application id from searchtap dashboard.</comment>
                 </field>
             </group>
 
@@ -65,6 +65,24 @@
                     <source_model>Gs\Searchtap\Model\Config\Source\GetAdditionalAttributes</source_model>
                     <!--<frontend_model>Gs\Searchtap\Block\Adminhtml\System\Config\Form\Field\ProductAdditionalAttributes</frontend_model>-->
                     <!--<backend_model>Magento\Config\Model\Config\Backend\Serialized\ArraySerialized</backend_model>-->
+                </field>
+            </group>
+
+            <group id="categories" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1"
+                   showInStore="1">
+                <label>Categories</label>
+
+                <field id="st_categories_menu" translate="label" type="select" sortOrder="80" showInDefault="1"
+                       showInWebsite="1" showInStore="1">
+                    <label>Include In Menu</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <validate>required-entry</validate>
+                </field>
+
+                <field id="st_categories_ignore" translate="label" type="text" sortOrder="80" showInDefault="1"
+                       showInWebsite="1" showInStore="1">
+                    <label>Skip Categories In Filter</label>
+                    <comment>Add the comma separated category IDs that need to skip in filters</comment>
                 </field>
             </group>
 

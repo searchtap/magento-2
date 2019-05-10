@@ -28,11 +28,15 @@ class Indexer extends Command
     protected $imageHeight = 0;
     public $actualCount = 0;
     public $parentCount = 0;
+    public $categoryIncludeInMenu = 0;
+    public $skipCategoryIds;
     protected $product_visibility_array = array('1' => 'Not Visible Individually', '2' => 'Catalog', '3' => 'Search', '4' => 'Catalog,Search');
+    private $st;
 
     const NAME = 'p';
     const DELETE = 'd';
     const STORE = 's';
+    const DELETE_FULL_SYNC = 'f';
 
     public function __construct(\Magento\Framework\App\State $state)
     {
@@ -42,6 +46,8 @@ class Indexer extends Command
 
     protected function configure()
     {
+        error_reporting(0);
+
         $options = [
             new InputOption(
                 self::NAME,
@@ -55,6 +61,11 @@ class Indexer extends Command
             ),
             new InputOption(
                 self::STORE,
+                null,
+                InputOption::VALUE_OPTIONAL
+            ),
+            new InputOption(
+                self::DELETE_FULL_SYNC,
                 null,
                 InputOption::VALUE_OPTIONAL
             )
@@ -80,16 +91,19 @@ class Indexer extends Command
 
         if ($input->getOption(self::NAME) != null) {
             $productIds = $input->getOption(self::NAME);
-
             if ($productIds)
                 $this->indexSingleProduct($productIds);
         } else if ($input->getOption(self::DELETE) != null) {
             $this->getStoreDetails();
             $productIds = explode(",", $input->getOption(self::DELETE));
-            $st = new SearchTapAPI();
-            $st->searchtapCurlDeleteRequest($productIds, $this->collectionName, $this->adminKey);
-        } else $this->indexProducts();
-
+            $this->st->searchtapCurlDeleteRequest($productIds);
+        } else if ($input->getOption(self::DELETE_FULL_SYNC) != null) {
+            $this->getStoreDetails();
+            $this->deleteFullSync($this->storeId);
+        } else {
+            $this->indexProducts();
+            $this->deleteFullSync($this->storeId);
+        }
     }
 
     public function getStoreDetails()
@@ -97,13 +111,16 @@ class Indexer extends Command
         $this->cert_path = BP . '/app/code/Gs/Searchtap/gs_cert/searchtap.io.crt';
         $this->product_visibility_array = array('1' => 'Not Visible Individually', '2' => 'Catalog', '3' => 'Search', '4' => 'Catalog,Search');
         $this->objectManager = \Magento\Framework\App\ObjectManager::getInstance();
-//        $s = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_store');
         $this->imageWidth = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/image/st_image_width', $this->storeId);
         $this->imageHeight = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/image/st_image_height', $this->storeId);
         $this->collectionName = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_collection', $this->storeId);
         $this->adminKey = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_admin_key', $this->storeId);
         $this->applicationId = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_application_id', $this->storeId);
         $this->selectedAttributes = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/attributes/additional_attributes', $this->storeId);
+        $this->categoryIncludeInMenu = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/categories/st_categories_menu', $this->storeId);
+        $this->skipCategoryIds = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/categories/st_categories_ignore', $this->storeId);
+
+        $this->st = new SearchTapAPI($this->applicationId, $this->collectionName, $this->adminKey);
     }
 
 //    public function initializeSearchtap () {
@@ -112,7 +129,6 @@ class Indexer extends Command
 
     public function indexSingleProduct($ids)
     {
-
         echo 'Start Indexing';
         $productIds = explode(",", $ids);
 
@@ -234,8 +250,7 @@ class Indexer extends Command
                 $productIds[] = $product->getId();
             }
 
-            $st = new SearchTapAPI();
-            $st->searchtapCurlDeleteRequest($productIds, $this->collectionName, $this->adminKey);
+            $this->st->searchtapCurlDeleteRequest($productIds);
 
             $i += $productSteps;
 
@@ -301,8 +316,7 @@ class Indexer extends Command
 
         unset($product_array);
 
-        $st = new SearchTapAPI();
-        $st->searchtapCurlRequest($product_json, $this->collectionName, $this->adminKey);
+        $this->st->searchtapCurlRequest($product_json);
 
         unset($product_json);
     }
@@ -407,7 +421,17 @@ class Indexer extends Command
 
         $categories = $product->getCategoryCollection()
             ->setStoreId($this->storeId)
+            ->addAttributeToFilter('is_active', true)
             ->addAttributeToSelect('path');
+
+        if ($this->categoryIncludeInMenu)
+            $categories->addAttributeToFilter('include_in_menu', array('eq' => 1));
+
+        if ($this->skipCategoryIds) {
+            $cat_ids = explode(",", $this->skipCategoryIds);
+            foreach ($cat_ids as $id)
+                $categories->addAttributeToFilter('path', array('nlike' => "%$id%"));
+        }
 
         foreach ($categories as $cat1) {
 
@@ -418,7 +442,7 @@ class Indexer extends Command
             $collection_cat = $categoryFactory->create()
                 ->addAttributeToSelect('*')
                 ->setStoreId($this->storeId)
-                ->addFieldToFilter('entity_id', array('in' => $pathIds));;
+                ->addFieldToFilter('entity_id', array('in' => $pathIds));
 
             $pathByName = '';
             $level = 1;
@@ -427,13 +451,16 @@ class Indexer extends Command
             foreach ($collection_cat as $cat) {
                 if (!$cat->hasChildren()) {
                     if (!in_array($cat->getName(), $_categories))
-                        if ($cat->getIsActive()) {
-                            $_categories[] = htmlspecialchars_decode($cat->getName());
-                        }
+                        $_categories[] = htmlspecialchars_decode($cat->getName());
                 }
+
+                if ($this->categoryIncludeInMenu)
+                    if (!$cat->getIncludeInMenu())
+                        continue 2;
+
                 $path_name[$row][0] = $cat->getId();
-                $path_name[$row][1] = htmlspecialchars_decode($cat->getName());
-                $path_name[$row][2] = $cat->getIsActive();
+                $path_name[$row][1] = trim(htmlspecialchars_decode($cat->getName()));
+                $path_name[$row][2] = trim(htmlspecialchars_decode($cat->getIncludeInMenu()));
 
                 $row++;
             }
@@ -447,16 +474,14 @@ class Indexer extends Command
                             $pathByName .= '|||' . $path_name[$j][1];
                         }
 
-                        if ($path_name[$j][2]) {
-                            if (!isset($catlevelArray['_category_level_' . $level])) {
-                                $catlevelArray['_category_level_' . $level][] = $path_name[$j][1];
-                            }
-                        }
+                        if (!in_array($path_name[$j][1], $catlevelArray['_category_level_' . $level]))
+                            $catlevelArray['_category_level_' . $level][] = $path_name[$j][1];
                     }
                 }
-                if (!isset($catpathArray['categories_level_' . $level])) {
+
+                if (!in_array($pathByName, $catpathArray['categories_level_' . $level]))
                     $catpathArray['categories_level_' . $level][] = $pathByName;
-                }
+
                 $level++;
             }
         }
@@ -473,16 +498,14 @@ class Indexer extends Command
                     $explodeAttrs = explode(',', $product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
                     $customAttributes[$attr] = array_map("htmlspecialchars_decode", $explodeAttrs);
                 } else {
-                     $attribute_value = $product->getData($attr);
-                     if($attribute_value)
-                       $customAttributes[$attr] = htmlspecialchars_decode($product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
-               }
+                    $attribute_value = $product->getData($attr);
+                    if ($attribute_value)
+                        $customAttributes[$attr] = htmlspecialchars_decode($product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
+                }
             }
         }
 
         $emulator->stopEnvironmentEmulation();
-
-        //print_r($customAttributes);
 
         $productArray = array(
             'id' => (int)$productId,
@@ -514,6 +537,108 @@ class Indexer extends Command
         $array = array_merge($productArray, $catpathArray, $catlevelArray, $customAttributes, $configurableAttributes);
 
         return $array;
+    }
+
+    public function getProductCollection($storeId)
+    {
+        $productIds = array();
+
+        $productCollection = $this->objectManager->create('Magento\Catalog\Model\ResourceModel\Product\CollectionFactory');
+
+        $collection = $productCollection->create()
+            ->addStoreFilter($storeId)
+            ->addAttributeToSelect('entity_id')
+            ->addAttributeToFilter('status', array('eq' => 1));
+
+        $collection->getSelect()->joinLeft(array(
+            'link_table' => 'catalog_product_super_link'),
+            'link_table.product_id = e.entity_id',
+            array('product_id')
+        );
+
+        $collection->getSelect()->where('link_table.product_id IS NULL');
+
+        $collection->load();
+
+        foreach ($collection as $product)
+            $productIds[] = $product->getId();
+
+        return $productIds;
+    }
+
+    public function deleteFullSync($storeId)
+    {
+        $count = 1000;
+        $skip = 0;
+        $productIds = array();
+
+        $dbIds = $this->getProductCollection($storeId);
+
+        while (true) {
+            $results = $this->st->searchtapCurlSearchRequest($count, $skip);
+            if (!$results) break;
+
+            foreach ($results as $object) {
+                $productIds[] = $object->id;
+            }
+
+            $idsToBeDeleted = array_values(array_diff($productIds, $dbIds));
+            if (count($idsToBeDeleted) > 0)
+                $this->deleteInactiveProducts($idsToBeDeleted);
+
+            unset($productIds);
+            $skip += $count;
+        }
+        //check if there is any product ID in queue that need to be deleted
+        $this->checkQueueForDelete();
+    }
+
+    public function deleteInactiveProducts($idsToBeDeleted)
+    {
+        date_default_timezone_set('Asia/Kolkata');
+        $date = date('Y-m-d H:i:s');
+
+        $response = $this->st->searchtapCurlDeleteRequest($idsToBeDeleted);
+        if ($response["responseHttpCode"] != 200) {
+            try {
+                $model = $this->objectManager->create('Gs\Searchtap\Model\Queue');
+
+                foreach ($idsToBeDeleted as $id) {
+                    $data = array(
+                        'product_id' => $id,
+                        'action' => 'delete',
+                        'last_sent_at' => $date
+                    );
+
+                    $model->setData($data)->save();
+                }
+
+            } catch (error $error) {
+                $this->logger->info($error);
+            }
+        }
+        return $response;
+    }
+
+    public function checkQueueForDelete()
+    {
+        $idsToBeDeleted = array();
+        $model = $this->objectManager->create('Gs\Searchtap\Model\Queue');
+        $collection = $model->getCollection()
+            ->addFieldToSelect('product_id')
+            ->addFieldToFilter('action', array('eq' => 'delete'));
+
+        foreach ($collection as $entity) {
+            $idsToBeDeleted[] = $entity->getId();
+        }
+
+        if(count($idsToBeDeleted) > 0) {
+            $response = $this->deleteInactiveProducts($idsToBeDeleted);
+            if ($response["responseHttpCode"] == 200) {
+                foreach ($collection as $entity)
+                    $entity->delete();
+            }
+        }
     }
 }
 
