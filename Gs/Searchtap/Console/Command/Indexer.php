@@ -119,7 +119,7 @@ class Indexer extends Command
         $this->selectedAttributes = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/attributes/additional_attributes', $this->storeId);
         $this->categoryIncludeInMenu = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/categories/st_categories_menu', $this->storeId);
         $this->skipCategoryIds = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/categories/st_categories_ignore', $this->storeId);
-
+       $this->discountFilterEnabled = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/st_discount/st_discount_enabled', $this->storeId);
         $this->st = new SearchTapAPI($this->applicationId, $this->collectionName, $this->adminKey);
     }
 
@@ -533,7 +533,12 @@ class Indexer extends Command
             'small_cache_image' => $small_cache_image,
             'base_cache_image' => $base_cache_image
         );
-
+        if ($this->discountFilterEnabled) {
+            if($productPrice) {
+                $discount_percentage = (($productPrice - $productSpecialPrice) / $productPrice) * 100;
+                $productArray['discount_percentage'] = round($discount_percentage);
+            }
+        }
         $array = array_merge($productArray, $catpathArray, $catlevelArray, $customAttributes, $configurableAttributes);
 
         return $array;
