@@ -497,7 +497,12 @@ class Indexer extends Command
                 if ($product->getResource()->getAttribute($attr)->getFrontendInput() == 'multiselect') {
                     $explodeAttrs = explode(',', $product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
                     $customAttributes[$attr] = array_map("htmlspecialchars_decode", $explodeAttrs);
-                } else {
+                } 
+                else if ($product->getResource()->getAttribute($attr)->getFrontendInput() == 'price') {
+                    $explodeAttrs = explode(',', $product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
+                    $customAttributes[$attr] = array_map("htmlspecialchars_decode", $explodeAttrs);
+                } 
+               else {
                     $attribute_value = $product->getData($attr);
                     if ($attribute_value)
                         $customAttributes[$attr] = htmlspecialchars_decode($product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
