@@ -498,10 +498,10 @@ class Indexer extends Command
                     $explodeAttrs = explode(',', $product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
                     $customAttributes[$attr] = array_map("htmlspecialchars_decode", $explodeAttrs);
                 } 
-                else if ($product->getResource()->getAttribute($attr)->getFrontendInput() == 'price') {
-                    $explodeAttrs = explode(',', $product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
-                    $customAttributes[$attr] = array_map("htmlspecialchars_decode", $explodeAttrs);
-                } 
+                else if($product->getResource()->getAttribute($attr)->getFrontendInput() == 'price'){
+                    $customAttributes[$attr] =(int) htmlspecialchars_decode($product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
+                }
+
                else {
                     $attribute_value = $product->getData($attr);
                     if ($attribute_value)
