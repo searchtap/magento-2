@@ -410,6 +410,10 @@ class Indexer extends Command
         $small_cache_image = $image_helper->create()->init($product, 'product_small_image')->resize($this->imageWidth, $this->imageHeight)->getUrl();
         $base_cache_image = $image_helper->create()->init($product, 'product_base_image')->resize($this->imageWidth, $this->imageHeight)->getUrl();
 
+
+//        var_dump($image_helper->create()->init($product, 'product_back_label')->resize($this->imageWidth, $this->imageHeight)->getUrl());
+
+
         //get currency code and symbol
         $currencyCode = $store->getCurrentCurrencyCode();
         $currencySymbol = $this->objectManager->create('Magento\Framework\Locale\CurrencyInterface')->getCurrency($currencyCode)->getSymbol();
@@ -497,7 +501,20 @@ class Indexer extends Command
                 if ($product->getResource()->getAttribute($attr)->getFrontendInput() == 'multiselect') {
                     $explodeAttrs = explode(',', $product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
                     $customAttributes[$attr] = array_map("htmlspecialchars_decode", $explodeAttrs);
-                } else {
+                }
+                else if ($product->getResource()->getAttribute($attr)->getFrontendInput() == 'media_image') {
+//                    $productImageAttr = $product->getCustomAttribute( $attr );
+//                    var_dump($product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
+//                    $productImage = $this->helper('Magento\Catalog\Helper\Image')
+//                        ->init($product, $attr)
+//                        ->setImageFile($productImageAttr->getValue());
+
+                    $img = $image_helper->create()->init($product, 'back_label')->resize($this->imageWidth, $this->imageHeight)->getUrl();
+                    var_dump($img);
+
+//                    var_dump($productImage);
+                }
+                else {
                     $attribute_value = $product->getData($attr);
                     if ($attribute_value)
                         $customAttributes[$attr] = htmlspecialchars_decode($product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
