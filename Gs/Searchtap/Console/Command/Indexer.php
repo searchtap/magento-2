@@ -2,6 +2,7 @@
 
 namespace Gs\Searchtap\Console\Command;
 
+use Gs\Searchtap\Console\Command\SearchTapAPI;
 use Gs\Searchtap\Observer\Searchtap;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -10,6 +11,8 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Input\InputDefinition;
 use Gs\Searchtap\Console\Command\SearchTapAPI;
+use \Magento\Catalog\Model\ResourceModel\Product\Attribute\CollectionFactory
+    as catalogProductAttributeCollectionFactory;
 
 //use Searchtap\src\Searchtap\SearchTapClient;
 
@@ -119,7 +122,7 @@ class Indexer extends Command
         $this->selectedAttributes = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/attributes/additional_attributes', $this->storeId);
         $this->categoryIncludeInMenu = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/categories/st_categories_menu', $this->storeId);
         $this->skipCategoryIds = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/categories/st_categories_ignore', $this->storeId);
-       $this->discountFilterEnabled = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/st_discount/st_discount_enabled', $this->storeId);
+        $this->discountFilterEnabled = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/st_discount/st_discount_enabled', $this->storeId);
         $this->st = new SearchTapAPI($this->applicationId, $this->collectionName, $this->adminKey);
     }
 
@@ -410,10 +413,6 @@ class Indexer extends Command
         $small_cache_image = $image_helper->create()->init($product, 'product_small_image')->resize($this->imageWidth, $this->imageHeight)->getUrl();
         $base_cache_image = $image_helper->create()->init($product, 'product_base_image')->resize($this->imageWidth, $this->imageHeight)->getUrl();
 
-
-//        var_dump($image_helper->create()->init($product, 'product_back_label')->resize($this->imageWidth, $this->imageHeight)->getUrl());
-
-
         //get currency code and symbol
         $currencyCode = $store->getCurrentCurrencyCode();
         $currencySymbol = $this->objectManager->create('Magento\Framework\Locale\CurrencyInterface')->getCurrency($currencyCode)->getSymbol();
@@ -502,18 +501,36 @@ class Indexer extends Command
                     $explodeAttrs = explode(',', $product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
                     $customAttributes[$attr] = array_map("htmlspecialchars_decode", $explodeAttrs);
                 }
-                else if ($product->getResource()->getAttribute($attr)->getFrontendInput() == 'media_image') {
-//                    $productImageAttr = $product->getCustomAttribute( $attr );
-//                    var_dump($product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
-//                    $productImage = $this->helper('Magento\Catalog\Helper\Image')
-//                        ->init($product, $attr)
-//                        ->setImageFile($productImageAttr->getValue());
-
-                    $img = $image_helper->create()->init($product, 'back_label')->resize($this->imageWidth, $this->imageHeight)->getUrl();
-                    var_dump($img);
-
-//                    var_dump($productImage);
+                elseif ($product->getResource()->getAttribute($attr)->getFrontendInput() == 'boolean')
+                {
+                    $customAttributes[$attr] = $product->getData($attr);
                 }
+
+                else if($product->getResource()->getAttribute($attr)->getFrontendInput() == 'price'){
+                    $customAttributes[$attr] = (float)$product->getResource()->getAttribute($attr)->getFrontend()->getValue($product);
+                }
+//                else if ($product->getResource()->getAttribute($attr)->getFrontendInput() == "media_image") {
+//                    $imageFactory = $this->objectManager->create('\Magento\Catalog\Helper\ImageFactory');
+//
+//                    $images = $product->getMediaGalleryImages();
+////                    if ($images instanceof \Magento\Framework\Data\Collection) {
+//
+//                        foreach ($images as $img) {
+//                            $image = $imageFactory
+//                                ->create()
+//                                ->init($product, 'back_label')
+//                                ->setImageFile($img->getFile());
+//
+//                            $image->constrainOnly(true)// Guarantee, that image picture will not be bigger, than it was.
+//                            ->keepAspectRatio(true)// Guarantee, that image picture width/height will not be distorted.
+//                            ->keepFrame(true)// Guarantee, that image will have dimensions, set in $width/$height
+//                            ->resize($this->imageWidth, $this->imageHeight);
+//
+//                            var_dump($image->getUrl());
+//                        }
+////                    }
+//                }
+
                 else {
                     $attribute_value = $product->getData($attr);
                     if ($attribute_value)
@@ -550,6 +567,7 @@ class Indexer extends Command
             'small_cache_image' => $small_cache_image,
             'base_cache_image' => $base_cache_image
         );
+
         if ($this->discountFilterEnabled) {
             if($productPrice) {
                 $discount_percentage = (($productPrice - $productSpecialPrice) / $productPrice) * 100;
