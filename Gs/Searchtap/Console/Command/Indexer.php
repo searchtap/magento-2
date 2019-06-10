@@ -430,7 +430,7 @@ class Indexer extends Command
         if ($this->skipCategoryIds) {
             $cat_ids = explode(",", $this->skipCategoryIds);
             foreach ($cat_ids as $id)
-                $categories->addAttributeToFilter('path', array('nlike' => "%$id%"));
+                $categories->addAttributeToFilter('path', array('nlike' => "%/$id/%"));
         }
 
         foreach ($categories as $cat1) {
