@@ -501,21 +501,26 @@ class Indexer extends Command
                     $explodeAttrs = explode(',', $product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
                     $customAttributes[$attr] = array_map("htmlspecialchars_decode", $explodeAttrs);
                 }
-                elseif ($product->getResource()->getAttribute($attr)->getFrontendInput() == 'boolean')
-                {
-                    $customAttributes[$attr] = $product->getData($attr);
-                }
+//                elseif ($product->getResource()->getAttribute($attr)->getFrontendInput() == 'boolean')
+//                {
+//                    $customAttributes[$attr] = $product->getData($attr);
+//                }
 
                 else if($product->getResource()->getAttribute($attr)->getFrontendInput() == 'price'){
                     $customAttributes[$attr] = (float)$product->getResource()->getAttribute($attr)->getFrontend()->getValue($product);
                 }
-//                else if ($product->getResource()->getAttribute($attr)->getFrontendInput() == "media_image") {
+                else if ($product->getResource()->getAttribute($attr)->getFrontendInput() == "media_image") {
+
+                    $image_helper->create()
+                        ->init($product, 'icon_image')
+                        ->setImageFile($product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
 //                    $imageFactory = $this->objectManager->create('\Magento\Catalog\Helper\ImageFactory');
 //
 //                    $images = $product->getMediaGalleryImages();
 ////                    if ($images instanceof \Magento\Framework\Data\Collection) {
 //
 //                        foreach ($images as $img) {
+//                            var_dump($img);
 //                            $image = $imageFactory
 //                                ->create()
 //                                ->init($product, 'back_label')
@@ -528,8 +533,8 @@ class Indexer extends Command
 //
 //                            var_dump($image->getUrl());
 //                        }
-////                    }
-//                }
+//                    }
+                }
 
                 else {
                     $attribute_value = $product->getData($attr);
