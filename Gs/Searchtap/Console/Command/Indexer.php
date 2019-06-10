@@ -428,14 +428,20 @@ class Indexer extends Command
             $categories->addAttributeToFilter('include_in_menu', array('eq' => 1));
 
         if ($this->skipCategoryIds) {
-            $cat_ids = explode(",", $this->skipCategoryIds);
-            foreach ($cat_ids as $id)
-                $categories->addAttributeToFilter('path', array('nlike' => "%/$id/%"));
+            $this->skipCategoryIds = explode(",", $this->skipCategoryIds);
+//            $cat_ids = explode(",", $this->skipCategoryIds);
+//            foreach ($cat_ids as $id)
+//                $categories->addAttributeToFilter('path', array('nlike' => "%/$id/%"));
         }
 
         foreach ($categories as $cat1) {
-
             $pathIds = explode('/', $cat1->getPath());
+
+            foreach ($this->skipCategoryIds as $id) {
+                if (in_array($id, $pathIds))
+                    continue 2;
+            }
+
             array_shift($pathIds);
 
             $categoryFactory = $this->objectManager->create('Magento\Catalog\Model\ResourceModel\Category\CollectionFactory');
@@ -498,16 +504,17 @@ class Indexer extends Command
                     $explodeAttrs = explode(',', $product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
                     $customAttributes[$attr] = array_map("htmlspecialchars_decode", $explodeAttrs);
                 } 
-                 elseif ($product->getResource()->getAttribute($attr)->getFrontendInput() == 'boolean')
+                 else if ($product->getResource()->getAttribute($attr)->getFrontendInput() == 'boolean')
                 {
-                    $customAttributes[$attr] = (bool)htmlspecialchars_decode($product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
-                
-                } 
-
-                else if($product->getResource()->getAttribute($attr)->getFrontendInput() == 'price'){
-                    $customAttributes[$attr] =(int) htmlspecialchars_decode($product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
+                      $customAttributes[$attr] = (bool)$product->getData($attr);
                 }
-
+                else if ($product->getResource()->getAttribute($attr)->getFrontendInput() == 'price'){
+                    $customAttributes[$attr] = (float)$product->getResource()->getAttribute($attr)->getFrontend()->getValue($product);
+                }
+                else if ($product->getResource()->getAttribute($attr)->getFrontendInput() == 'media_image') {
+                    $image = $image_helper->create()->init($product, 'category_page_list', ['type' => $attr]);
+                    $customAttributes[$attr] = $image->getUrl();
+                }
                else {
                     $attribute_value = $product->getData($attr);
                     if ($attribute_value)
