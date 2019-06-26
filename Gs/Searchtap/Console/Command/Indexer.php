@@ -119,7 +119,7 @@ class Indexer extends Command
         $this->selectedAttributes = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/attributes/additional_attributes', $this->storeId);
         $this->categoryIncludeInMenu = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/categories/st_categories_menu', $this->storeId);
         $this->skipCategoryIds = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/categories/st_categories_ignore', $this->storeId);
-       $this->discountFilterEnabled = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/st_discount/st_discount_enabled', $this->storeId);
+        $this->discountFilterEnabled = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/st_discount/st_discount_enabled', $this->storeId);
         $this->st = new SearchTapAPI($this->applicationId, $this->collectionName, $this->adminKey);
     }
 
@@ -427,8 +427,10 @@ class Indexer extends Command
         if ($this->categoryIncludeInMenu)
             $categories->addAttributeToFilter('include_in_menu', array('eq' => 1));
 
+        $skipIds = array();
+
         if ($this->skipCategoryIds) {
-            $this->skipCategoryIds = explode(",", $this->skipCategoryIds);
+            $skipIds = explode(",", $this->skipCategoryIds);
 //            $cat_ids = explode(",", $this->skipCategoryIds);
 //            foreach ($cat_ids as $id)
 //                $categories->addAttributeToFilter('path', array('nlike' => "%/$id/%"));
@@ -437,9 +439,10 @@ class Indexer extends Command
         foreach ($categories as $cat1) {
             $pathIds = explode('/', $cat1->getPath());
 
-            foreach ($this->skipCategoryIds as $id) {
-                if (in_array($id, $pathIds))
+            foreach ($skipIds as $id) {
+                if (in_array($id, $pathIds)) {
                     continue 2;
+                }
             }
 
             array_shift($pathIds);
