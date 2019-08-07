@@ -338,7 +338,6 @@ class Indexer extends Command
         $productVisibility = $this->product_visibility_array[$product->getVisibility()];
         $productURL = $product->getProductUrl();
         $productPrice = $product->getPriceInfo()->getPrice('regular_price')->getAmount()->getValue();
-
         $productSpecialPrice = $product->getFinalPrice();
         $productCreatedAt = strtotime($product->getCreatedAt());
         $productType = $product->getTypeId();
@@ -364,7 +363,7 @@ class Indexer extends Command
             $childCount = 0;
             $option = array();
 
-            foreach ($data as $attr) {
+            foreach ($data as $key=>$attr) {
                 foreach ($attr as $p) {
                     $option[$p['sku']][$p['attribute_code']] = $p['option_title'];
                     $option[$p['sku']]['sku'] = $p['sku'];
@@ -376,18 +375,24 @@ class Indexer extends Command
                     $option[$p['sku']]['discounted_price'] = (float)$childProduct->getFinalPrice();
                     $option[$p['sku']]['status'] = (int)$childProduct->getStatus();
                     $option[$p['sku']]['visibility'] = $this->product_visibility_array[$childProduct->getVisibility()];
-                    $option[$p['sku']]['value_id'] = $p['value_index'];
+                    $option[$p['sku']][$p['attribute_code'].'_'.'value_code']=(int)$p['value_index'];
+                    $option[$p['sku']][$p['attribute_code'].'_code']=$key;
 
                     //get stock details
                     $childStock = $this->objectManager->get('Magento\CatalogInventory\Api\StockRegistryInterface')->getStockItem($childProduct->getId());
                     $option[$p['sku']]['stock_qty'] = $childStock->getQty();
                     $option[$p['sku']]['in_stock'] = $childStock->getIsInStock();
-
+                    // print_r($attr);     
                     if ($option[$p['sku']]['in_stock'] && $option[$p['sku']]['stock_qty'] > 0)
-                        $configurableAttributes['_' . $p['attribute_code']][] = $p['option_title'];
-
+                  {      $configurableAttributes['_' . $p['attribute_code']][] = $p['option_title'];
+                       
+                      
                 }
-            }
+          }
+       
+ }
+
+
 
             foreach ($configurableAttributes as $key => $value)
                 $configurableAttributes[$key] = array_unique($value);
@@ -396,6 +401,7 @@ class Indexer extends Command
                 $variation[$childCount] = $child;
                 $childCount++;
             }
+
         }
 
         //get images
@@ -431,9 +437,6 @@ class Indexer extends Command
 
         if ($this->skipCategoryIds) {
             $skipIds = explode(",", $this->skipCategoryIds);
-//            $cat_ids = explode(",", $this->skipCategoryIds);
-//            foreach ($cat_ids as $id)
-//                $categories->addAttributeToFilter('path', array('nlike' => "%/$id/%"));
         }
 
         foreach ($categories as $cat1) {
@@ -462,6 +465,8 @@ class Indexer extends Command
                     if (!in_array($cat->getName(), $_categories))
                         $_categories[] = htmlspecialchars_decode($cat->getName());
                 }
+                if(!$cat->getIsActive())
+                       continue 2;
 
                 if ($this->categoryIncludeInMenu)
                     if (!$cat->getIncludeInMenu())
@@ -485,6 +490,7 @@ class Indexer extends Command
 
                         if (!in_array($path_name[$j][1], $catlevelArray['_category_level_' . $level]))
                             $catlevelArray['_category_level_' . $level][] = $path_name[$j][1];
+                            // $catlevelArray['_category_level_' . $level][][str_replace(' ','_', $path_name[$j][1])]=$product->getId();
                     }
                 }
 
@@ -494,6 +500,11 @@ class Indexer extends Command
                 $level++;
             }
         }
+         //  foreach($catlevelArray as $key=>$val){
+         //  $catlevelArray[$key]=array_unique($val, SORT_REGULAR);
+      // }
+
+      // print_r($catlevelArray);
 
         //get custom attributes
         $selected = explode(',', $this->selectedAttributes);
