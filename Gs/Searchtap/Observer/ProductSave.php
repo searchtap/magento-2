@@ -35,6 +35,8 @@ class ProductSave implements ObserverInterface {
 
         $directory = $this->objectManager->get('\Magento\Framework\Filesystem\DirectoryList');
 
-        exec('php ' . $directory->getRoot() . '/bin/magento searchtap:indexer --p '. $product->getId() .' > /dev/null 2>/dev/null &');
+        $storeId = $product->getStoreId() ? $product->getStoreId() : 1;
+
+        exec('php ' . $directory->getRoot() . '/bin/magento searchtap:indexer --p '. $product->getId() .' --s ' . $storeId . ' > /dev/null 2>/dev/null &');
     }
 }

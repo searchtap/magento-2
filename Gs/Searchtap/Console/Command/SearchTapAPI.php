@@ -63,7 +63,7 @@ class SearchTapAPI {
 
                 $this->logger->info("Unique ID for " . $operation . " operation : " . json_decode($results)->uniqueId);
                 return [
-                    "uniqueId" => $results->uniqueId,
+                    "uniqueId" => json_decode($results)->uniqueId,
                     "responseHttpCode" => $responseHttpCode
                 ];
             }
@@ -71,6 +71,8 @@ class SearchTapAPI {
         } catch (error $error) {
             $this->logger->info($error);
         }
+
+        return [];
     }
 
     public function searchtapCurlRequest($jsonData)
