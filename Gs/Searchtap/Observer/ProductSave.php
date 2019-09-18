@@ -1,10 +1,12 @@
 <?php
+
 namespace Gs\Searchtap\Observer;
 
 use Magento\Framework\Event\ObserverInterface;
 use Gs\Searchtap\Console\Command\Indexer;
 
-class ProductSave implements ObserverInterface {
+class ProductSave implements ObserverInterface
+{
 
     protected $objectManager;
     protected $logger;
@@ -43,13 +45,22 @@ class ProductSave implements ObserverInterface {
             $storeManager = $this->objectManager->create('\Magento\Store\Model\StoreManagerInterface');
             $stores = $storeManager->getStores();
             foreach ($stores as $store) {
-                $storeIds[] = $store->getId();
+                $indexEnable = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/image/st_image_width', $store->getId());
+
+                if ($indexEnable)
+                    $storeIds[] = $store->getId();
             }
 
-            $storeId = $storeIds[0];
         }
-        $this->logger->info($storeId);
+        $this->logger->info($storeIds);
 
-        exec('php ' . $directory->getRoot() . '/bin/magento searchtap:indexer --p '. $product->getId() .' --s ' . $storeId . ' > /dev/null 2>/dev/null &');
+        if (count($storeIds) > 0) {
+            foreach ($storeIds as $storeId) {
+                exec('php ' . $directory->getRoot() . '/bin/magento searchtap:indexer --p ' . $product->getId() . ' --s ' . $storeId . ' > /dev/null 2>/dev/null &');
+            }
+        }
+        else {
+            exec('php ' . $directory->getRoot() . '/bin/magento searchtap:indexer --p ' . $product->getId() . ' --s ' . $storeId . ' > /dev/null 2>/dev/null &');
+        }
     }
 }

@@ -38,17 +38,26 @@
                     <validate>required-entry</validate>
                     <comment>Get the application id from searchtap dashboard.</comment>
                 </field>
+                <field id="st_enable_index" translate="label" type="select" sortOrder="1" showInDefault="1"
+                       showInWebsite="1"
+                       showInStore="1">
+                    <label>Enable Indexing</label>
+                    <validate>required-entry</validate>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
             </group>
 
             <group id="image" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1"
                    showInStore="1">
                 <label>Images</label>
-                <field id="st_image_width" translate="label" type="text" sortOrder="1" showInDefault="1" showInWebsite="1"
+                <field id="st_image_width" translate="label" type="text" sortOrder="1" showInDefault="1"
+                       showInWebsite="1"
                        showInStore="1">
                     <label>Image Width</label>
                     <validate>required-entry</validate>
                 </field>
-                <field id="st_image_height" translate="label" type="text" sortOrder="1" showInDefault="1" showInWebsite="1"
+                <field id="st_image_height" translate="label" type="text" sortOrder="1" showInDefault="1"
+                       showInWebsite="1"
                        showInStore="1">
                     <label>Image Height</label>
                     <validate>required-entry</validate>
@@ -85,7 +94,7 @@
                     <comment>Add the comma separated category IDs that need to skip in filters</comment>
                 </field>
             </group>
- <group id="st_discount" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="1"
+            <group id="st_discount" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="1"
                    showInStore="1">
                 <label>Discount Filter</label>
 
