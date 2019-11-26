@@ -1,7 +1,6 @@
 <?php
 
-$objectManager = \Magento\Framework\App\ObjectManager::getInstance();
-$storeId = $objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_store');
-$template = $objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/st_template/st_html');
+$storeId=$this->helper('Gs\Searchtap\Helper\Data')->getConfig('st_settings/general/st_store');
+$template=$this->helper('Gs\Searchtap\Helper\Data')->getConfig('st_settings/st_template/st_html');
 
 echo $template;

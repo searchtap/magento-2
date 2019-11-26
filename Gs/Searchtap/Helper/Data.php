@@ -22,4 +22,9 @@ class Data extends AbstractHelper
         return $this->getConfigValue(self::XML_PATH_SEARCHTAP .'general/'. $code, $storeId);
     }
 
+    public function getConfig($path='')
+    {
+        if($path) return $this->scopeConfig->getValue( $path, \Magento\Store\Model\ScopeInterface::SCOPE_STORE );
+        return $this->scopeConfig;
+    }
 }
