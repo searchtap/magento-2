@@ -30,6 +30,7 @@ class Indexer extends Command
     public $parentCount = 0;
     public $categoryIncludeInMenu = 0;
     public $skipCategoryIds;
+    public $batchsize;
     protected $product_visibility_array = array('1' => 'Not Visible Individually', '2' => 'Catalog', '3' => 'Search', '4' => 'Catalog,Search');
     private $st;
 
@@ -101,8 +102,8 @@ class Indexer extends Command
             $this->getStoreDetails();
             $this->deleteFullSync($this->storeId);
         } else {
-            $this->indexProducts();
             $this->deleteFullSync($this->storeId);
+            $this->indexProducts();
         }
     }
 
@@ -116,6 +117,7 @@ class Indexer extends Command
         $this->collectionName = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_collection', $this->storeId);
         $this->adminKey = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_admin_key', $this->storeId);
         $this->applicationId = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_application_id', $this->storeId);
+        $this->batchsize=$this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_batch_size', $this->storeId);
         $this->selectedAttributes = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/attributes/additional_attributes', $this->storeId);
         $this->categoryIncludeInMenu = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/categories/st_categories_menu', $this->storeId);
         $this->skipCategoryIds = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/categories/st_categories_ignore', $this->storeId);
@@ -147,7 +149,7 @@ class Indexer extends Command
     public function indexProducts()
     {
         $this->getStoreDetails();
-
+        $batch=$this->batchsize ? $this->batchsize :1000;
         $storeManager = $this->objectManager->get('\Magento\Store\Model\StoreManagerInterface');
         $stores = $storeManager->getStores(true, false);
         foreach ($stores as $store) {
@@ -160,7 +162,7 @@ class Indexer extends Command
         $this->logger->addWriter($writer);
 
         $counter = $i = 0;
-        $productSteps = 1000;
+        $productSteps = $batch;
 
         //Indexed enabled products and push to searchtap API.
         $productCollection = $this->objectManager->create('Magento\Catalog\Model\ResourceModel\Product\CollectionFactory');
@@ -221,7 +223,7 @@ class Indexer extends Command
         $this->logger->info("Issues = " . $issues);
 
         //Remove disabled products from searchtap server
-
+/*
         $deleteCollection = $productCollection->create()
             ->addStoreFilter($this->storeId)
             ->addAttributeToFilter('status', array('eq' => 2))
@@ -256,7 +258,7 @@ class Indexer extends Command
 
             $this->logger->info('Indexing complete');
         }
-
+*/
         echo 'Indexer completed';
     }
 

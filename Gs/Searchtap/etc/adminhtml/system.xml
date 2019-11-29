@@ -45,6 +45,12 @@
                     <validate>required-entry</validate>
                     <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
                 </field>
+
+                <field id="st_batch_size" translate="label" type="text" sortOrder="1" showInDefault="1"
+                       showInWebsite="1" showInStore="1">
+                    <label>Batch Size</label>
+                    <comment>Product batch size while indexing the data (default=>1000)</comment>
+                </field>
             </group>
 
             <group id="image" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1"
