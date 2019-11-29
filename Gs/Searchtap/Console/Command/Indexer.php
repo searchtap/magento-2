@@ -263,7 +263,7 @@ class Indexer extends Command
     public function productsJson($collection)
     {
         $product_array = array();
-
+        $invalid_product=array();
         foreach ($collection as $product) {
 
             $productFlag = true;
@@ -295,6 +295,7 @@ class Indexer extends Command
                     if ($flag == 0) {
                         $this->parentCount++;
                         $productFlag = false;
+                        $invalid_product[]= $product->getId();
                     }
                     break;
             }
@@ -305,20 +306,18 @@ class Indexer extends Command
             }
         }
 
-//        foreach ($collection as $product) {
-//
-//            $product_array[] = $this->productArray($product);
-//        }
+          if(!empty($product_array)){
+              $product_json = json_encode($product_array);
+              $this->st->searchtapCurlRequest($product_json);
+              unset($product_array);
+              unset($product_json);
+          }
 
-        $product_json = json_encode($product_array);
+          if(!empty($invalid_product)){
+              $this->st->searchtapCurlDeleteRequest($invalid_product);
 
-//        $this->logger->info(print_r($product_json, true));
-
-        unset($product_array);
-
-        $this->st->searchtapCurlRequest($product_json);
-
-        unset($product_json);
+              unset($invalid_product);
+          }
     }
 
     public function productArray($product)
@@ -366,23 +365,25 @@ class Indexer extends Command
 
             foreach ($data as $key => $attr) {
                 foreach ($attr as $p) {
-                    $option[$p['sku']][$p['attribute_code']] = $p['option_title'];
-                    $option[$p['sku']]['sku'] = $p['sku'];
-
                     $childObject = $this->objectManager->get('Magento\Catalog\Model\Product');
                     $childProduct = $childObject->loadByAttribute('sku', $p['sku']);
-                    $option[$p['sku']]['id'] = (int)$childProduct->getId();
-                    $option[$p['sku']]['price'] = (float)$childProduct->getPrice();
-                    $option[$p['sku']]['discounted_price'] = (float)$childProduct->getFinalPrice();
-                    $option[$p['sku']]['status'] = (int)$childProduct->getStatus();
-                    $option[$p['sku']]['visibility'] = $this->product_visibility_array[$childProduct->getVisibility()];
-                    $option[$p['sku']][$p['attribute_code'] . '_' . 'value_code'] = (int)$p['value_index'];
-                    $option[$p['sku']][$p['attribute_code'] . '_code'] = $key;
+                    $child_status= $childProduct->getStatus();
+                    if($child_status==1){
+                        $option[$p['sku']][$p['attribute_code']] = $p['option_title'];
+                        $option[$p['sku']]['sku'] = $p['sku'];
+                        $option[$p['sku']]['id'] = (int)$childProduct->getId();
+                        $option[$p['sku']]['price'] = (float)$childProduct->getPrice();
+                        $option[$p['sku']]['discounted_price'] = (float)$childProduct->getFinalPrice();
+                        $option[$p['sku']]['status'] = (int)$childProduct->getStatus();
+                        $option[$p['sku']]['visibility'] = $this->product_visibility_array[$childProduct->getVisibility()];
+                        $option[$p['sku']][$p['attribute_code'] . '_' . 'value_code'] = (int)$p['value_index'];
+                        $option[$p['sku']][$p['attribute_code'] . '_code'] = $key;
+                        //get stock details
+                        $childStock = $this->objectManager->get('Magento\CatalogInventory\Api\StockRegistryInterface')->getStockItem($childProduct->getId());
+                        $option[$p['sku']]['stock_qty'] = $childStock->getQty();
+                        $option[$p['sku']]['in_stock'] = $childStock->getIsInStock();
+                    }
 
-                    //get stock details
-                    $childStock = $this->objectManager->get('Magento\CatalogInventory\Api\StockRegistryInterface')->getStockItem($childProduct->getId());
-                    $option[$p['sku']]['stock_qty'] = $childStock->getQty();
-                    $option[$p['sku']]['in_stock'] = $childStock->getIsInStock();
                     // print_r($attr);     
                     if ($option[$p['sku']]['in_stock'] && $option[$p['sku']]['stock_qty'] > 0) {
                         $configurableAttributes['_' . $p['attribute_code']][] = $p['option_title'];
