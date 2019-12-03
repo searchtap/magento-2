@@ -47,8 +47,6 @@ class Indexer extends Command
 
     protected function configure()
     {
-        error_reporting(0);
-
         $options = [
             new InputOption(
                 self::NAME,
@@ -102,6 +100,7 @@ class Indexer extends Command
             $this->getStoreDetails();
             $this->deleteFullSync($this->storeId);
         } else {
+            $this->getStoreDetails();
             $this->deleteFullSync($this->storeId);
             $this->indexProducts();
         }
@@ -117,7 +116,7 @@ class Indexer extends Command
         $this->collectionName = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_collection', $this->storeId);
         $this->adminKey = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_admin_key', $this->storeId);
         $this->applicationId = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_application_id', $this->storeId);
-        $this->batchsize=$this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_batch_size', $this->storeId);
+        $this->batchsize = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/general/st_batch_size', $this->storeId);
         $this->selectedAttributes = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/attributes/additional_attributes', $this->storeId);
         $this->categoryIncludeInMenu = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/categories/st_categories_menu', $this->storeId);
         $this->skipCategoryIds = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/categories/st_categories_ignore', $this->storeId);
@@ -149,7 +148,7 @@ class Indexer extends Command
     public function indexProducts()
     {
         $this->getStoreDetails();
-        $batch=$this->batchsize ? $this->batchsize :1000;
+        $batch = $this->batchsize ? $this->batchsize : 1000;
         $storeManager = $this->objectManager->get('\Magento\Store\Model\StoreManagerInterface');
         $stores = $storeManager->getStores(true, false);
         foreach ($stores as $store) {
@@ -223,49 +222,49 @@ class Indexer extends Command
         $this->logger->info("Issues = " . $issues);
 
         //Remove disabled products from searchtap server
-/*
-        $deleteCollection = $productCollection->create()
-            ->addStoreFilter($this->storeId)
-            ->addAttributeToFilter('status', array('eq' => 2))
-            ->load();
+        /*
+                $deleteCollection = $productCollection->create()
+                    ->addStoreFilter($this->storeId)
+                    ->addAttributeToFilter('status', array('eq' => 2))
+                    ->load();
 
-        $totalDeletedProducts = $deleteCollection->getSize();
+                $totalDeletedProducts = $deleteCollection->getSize();
 
-        $counter = $i = 0;
+                $counter = $i = 0;
 
-        $this->logger->info('Total products that need to be deleted = ' . $totalDeletedProducts);
+                $this->logger->info('Total products that need to be deleted = ' . $totalDeletedProducts);
 
-        while ($i <= $totalDeletedProducts) {
-            $counter++;
+                while ($i <= $totalDeletedProducts) {
+                    $counter++;
 
-            $productIds = array();
+                    $productIds = array();
 
-            $deleteCollections = $productCollection->create()
-                ->addStoreFilter($this->storeId)
-                ->addAttributeToSelect('entity_id')
-                ->addAttributeToFilter('status', array('eq' => 2))
-                ->setPageSize($productSteps)
-                ->setCurPage($counter)
-                ->load();
+                    $deleteCollections = $productCollection->create()
+                        ->addStoreFilter($this->storeId)
+                        ->addAttributeToSelect('entity_id')
+                        ->addAttributeToFilter('status', array('eq' => 2))
+                        ->setPageSize($productSteps)
+                        ->setCurPage($counter)
+                        ->load();
 
-            foreach ($deleteCollections as $product) {
-                $productIds[] = $product->getId();
-            }
+                    foreach ($deleteCollections as $product) {
+                        $productIds[] = $product->getId();
+                    }
 
-            $this->st->searchtapCurlDeleteRequest($productIds);
+                    $this->st->searchtapCurlDeleteRequest($productIds);
 
-            $i += $productSteps;
+                    $i += $productSteps;
 
-            $this->logger->info('Indexing complete');
-        }
-*/
+                    $this->logger->info('Indexing complete');
+                }
+        */
         echo 'Indexer completed';
     }
 
     public function productsJson($collection)
     {
         $product_array = array();
-        $invalid_product=array();
+        $invalid_product = array();
         foreach ($collection as $product) {
 
             $productFlag = true;
@@ -297,7 +296,7 @@ class Indexer extends Command
                     if ($flag == 0) {
                         $this->parentCount++;
                         $productFlag = false;
-                        $invalid_product[]= $product->getId();
+                        $invalid_product[] = $product->getId();
                     }
                     break;
             }
@@ -308,18 +307,18 @@ class Indexer extends Command
             }
         }
 
-          if(!empty($product_array)){
-              $product_json = json_encode($product_array);
-              $this->st->searchtapCurlRequest($product_json);
-              unset($product_array);
-              unset($product_json);
-          }
+        if (!empty($product_array)) {
+            $product_json = json_encode($product_array);
+            $this->st->searchtapCurlRequest($product_json);
+            unset($product_array);
+            unset($product_json);
+        }
 
-          if(!empty($invalid_product)){
-              $this->st->searchtapCurlDeleteRequest($invalid_product);
+        if (!empty($invalid_product)) {
+            $this->st->searchtapCurlDeleteRequest($invalid_product);
 
-              unset($invalid_product);
-          }
+            unset($invalid_product);
+        }
     }
 
     public function productArray($product)
@@ -369,8 +368,9 @@ class Indexer extends Command
                 foreach ($attr as $p) {
                     $childObject = $this->objectManager->get('Magento\Catalog\Model\Product');
                     $childProduct = $childObject->loadByAttribute('sku', $p['sku']);
-                    $child_status= $childProduct->getStatus();
-                    if($child_status==1){
+                    $child_status = $childProduct->getStatus();
+
+                    if ($child_status == 1) {
                         $option[$p['sku']][$p['attribute_code']] = $p['option_title'];
                         $option[$p['sku']]['sku'] = $p['sku'];
                         $option[$p['sku']]['id'] = (int)$childProduct->getId();
@@ -384,14 +384,13 @@ class Indexer extends Command
                         $childStock = $this->objectManager->get('Magento\CatalogInventory\Api\StockRegistryInterface')->getStockItem($childProduct->getId());
                         $option[$p['sku']]['stock_qty'] = $childStock->getQty();
                         $option[$p['sku']]['in_stock'] = $childStock->getIsInStock();
+
+                        if ($option[$p['sku']]['in_stock'] && ($option[$p['sku']]['stock_qty'] > 0)) {
+                            $configurableAttributes['_' . $p['attribute_code']][] = $p['option_title'];
+                        }
                     }
 
-                    // print_r($attr);     
-                    if ($option[$p['sku']]['in_stock'] && $option[$p['sku']]['stock_qty'] > 0) {
-                        $configurableAttributes['_' . $p['attribute_code']][] = $p['option_title'];
 
-
-                    }
                 }
 
             }
@@ -490,16 +489,18 @@ class Indexer extends Command
                         } else {
                             $pathByName .= '|||' . $path_name[$j][1];
                         }
+                        if (!empty($catlevelArray['_category_level_' . $level])) {
+                            if (!in_array($path_name[$j][1], $catlevelArray['_category_level_' . $level]))
+                                $catlevelArray['_category_level_' . $level][] = $path_name[$j][1];
+                        }
 
-                        if (!in_array($path_name[$j][1], $catlevelArray['_category_level_' . $level]))
-                            $catlevelArray['_category_level_' . $level][] = $path_name[$j][1];
                         // $catlevelArray['_category_level_' . $level][][str_replace(' ','_', $path_name[$j][1])]=$product->getId();
                     }
                 }
-
-                if (!in_array($pathByName, $catpathArray['categories_level_' . $level]))
-                    $catpathArray['categories_level_' . $level][] = $pathByName;
-
+                if (!empty($catlevelArray['_category_level_' . $level])) {
+                    if (!in_array($pathByName, $catpathArray['categories_level_' . $level]))
+                        $catpathArray['categories_level_' . $level][] = $pathByName;
+                }
                 $level++;
             }
         }
