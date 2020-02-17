@@ -10,6 +10,13 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Input\InputDefinition;
 use Gs\Searchtap\Console\Command\SearchTapAPI;
+use Magento\Inventory\Model\SourceItem\Command\GetSourceItemsBySku;
+use \Magento\CatalogInventory\Api\StockRegistryInterface;
+
+//use Magento\CatalogInventory\Model\Spi\StockRegistryProviderInterface;
+use Magento\InventorySalesApi\Api\StockResolverInterface;
+use \Magento\Catalog\Api\ProductRepositoryInterface;
+
 
 //use Searchtap\src\Searchtap\SearchTapClient;
 
@@ -23,6 +30,7 @@ class Indexer extends Command
     protected $applicationId;
     protected $selectedAttributes;
     protected $logger;
+    protected $productRepository;
     protected $cert_path;
     protected $imageWidth = 0;
     protected $imageHeight = 0;
@@ -31,6 +39,10 @@ class Indexer extends Command
     public $categoryIncludeInMenu = 0;
     public $skipCategoryIds;
     public $batchsize;
+    protected $getSourceItemsBySku;
+    protected $stockRegistryProvider;
+    private $stockRepository;
+    protected $stockResolver;
     protected $product_visibility_array = array('1' => 'Not Visible Individually', '2' => 'Catalog', '3' => 'Search', '4' => 'Catalog,Search');
     private $st;
 
@@ -39,9 +51,14 @@ class Indexer extends Command
     const STORE = 's';
     const DELETE_FULL_SYNC = 'f';
 
-    public function __construct(\Magento\Framework\App\State $state)
+    public function __construct(\Magento\Framework\App\State $state, GetSourceItemsBySku $getSourceItemsBySku,StockRegistryInterface $stockRepository,ProductRepositoryInterface $productRepository,StockResolverInterface $stockResolver)
     {
         $this->state = $state;
+        $this->getSourceItemsBySku = $getSourceItemsBySku;
+        //    $this->stockRegistryProvider = $stockRegistryProvider;
+        $this->stockResolver = $stockResolver;
+        $this->productRepository = $productRepository;
+        $this->stockRepository=$stockRepository;
         parent::__construct();
     }
 
@@ -152,8 +169,10 @@ class Indexer extends Command
         $storeManager = $this->objectManager->get('\Magento\Store\Model\StoreManagerInterface');
         $stores = $storeManager->getStores(true, false);
         foreach ($stores as $store) {
+
             if ($this->storeId == $store->getId())
                 echo 'Indexer started for ' . $store->getName() . "\n";
+
         }
 
         $writer = new \Zend\Log\Writer\Stream(BP . '/var/log/searchtap.log');
@@ -266,6 +285,7 @@ class Indexer extends Command
         $product_array = array();
         $invalid_product = array();
         foreach ($collection as $product) {
+            $storeId = $product->getStoreId();
 
             $productFlag = true;
             $product_type_id = $product->getTypeId();
@@ -278,13 +298,22 @@ class Indexer extends Command
 
                     foreach ($data as $attr) {
                         foreach ($attr as $p) {
-                            $childObject = $this->objectManager->get('Magento\Catalog\Model\Product');
-                            $childProduct = $childObject->loadByAttribute('sku', $p['sku']);
-                            $childStatus = (int)$childProduct->getStatus();
+                            // $childObject = $this->objectManager->get('Magento\Catalog\Model\Product');
+                            //$childProduct = $childObject->loadByAttribute('sku', $p['sku']);
 
-                            $child_status[$child_count] = $childStatus;
+                            $productCollectionFactory = $this->objectManager->create('\Magento\Catalog\Model\ResourceModel\Product\CollectionFactory');
 
-                            $child_count++;
+                            $childProductCollection = $productCollectionFactory->create()
+                                ->addAttributeToSelect('*')
+                                ->addStoreFilter($this->storeId)
+                                ->addAttributeToFilter('sku', array('like' => $p['sku']));
+                            foreach ($childProductCollection as $childProduct) {
+                                $childStatus = (int)$childProduct->getStatus();
+                                $child_status[$child_count] = $childStatus;
+
+                                $child_count++;
+                            }
+
                         }
                     }
 
@@ -307,6 +336,7 @@ class Indexer extends Command
             }
         }
 
+
         if (!empty($product_array)) {
             $product_json = json_encode($product_array);
             $this->st->searchtapCurlRequest($product_json);
@@ -321,19 +351,67 @@ class Indexer extends Command
         }
     }
 
+    /*function for Catalog Price Rule*/
+
+    public function getCatalogPriceRuleFromProduct($childProduct, $customerGroupId)
+    {
+        $discount = array();
+        $sort_order = 1000;
+        $storeManager = $this->objectManager->get('\Magento\Store\Model\StoreManagerInterface');
+        $product = $this->objectManager->create('\Magento\Catalog\Model\ProductFactory')->create()->load($childProduct->getId());
+        $storeId = $product->getStoreId();
+        $store = $storeManager->getStore($storeId);
+        $websiteId = $store->getWebsiteId();
+        $date = $this->objectManager->create('\Magento\Framework\Stdlib\DateTime\DateTime');
+        $dateTs = $date->gmtDate();
+        $resource = $this->objectManager->create('\Magento\CatalogRule\Model\ResourceModel\Rule');
+        $rules = $resource->getRulesFromProduct($dateTs, $websiteId, $customerGroupId, $product->getId());
+
+        foreach ($rules as $rule) {
+            if ($rule['sort_order'] <= $sort_order) {
+                $discount = round($rule['action_amount']);
+                $sort_order = $rule['sort_order'];
+            }
+        }
+
+        /* To get the discounted price */
+        $discountPriceRule = $this->objectManager->create('\Magento\CatalogRule\Model\RuleFactory')->create();
+
+        $discountAmount = $childProduct->getFinalPrice();
+
+        $extensionAttributes = $childProduct->getExtensionAttributes();
+        $extensionAttributes->setItdFinalPrice($discountAmount);
+        $childProduct->setExtensionAttributes($extensionAttributes);
+
+        $discountAmount = $discountPriceRule->calcProductPriceRule($childProduct->setStoreId($this->storeId), $childProduct->getPrice());
+        if ($discount) {
+            return $discount;
+        } else {
+            return 0;
+        }
+
+    }
+
+
+    /* End Here */
+
     public function productArray($product)
     {
+
         $writer = new \Zend\Log\Writer\Stream(BP . '/var/log/searchtap.log');
         $this->logger = new \Zend\Log\Logger();
         $this->logger->addWriter($writer);
 
         $emulator = $this->objectManager->create('Magento\Store\Model\App\Emulation');
         $emulator->startEnvironmentEmulation($this->storeId, \Magento\Framework\App\Area::AREA_FRONTEND, true);
-
+        //   $storeManager = $this->objectManager->get('\Magento\Store\Model\StoreManagerInterface');
+        //   $storeCode=explode("_",$storeManager->getStore()->getCode());
         $productId = $product->getId();
         $productName = html_entity_decode($product->getName());
         $productSKU = $product->getSKU();
         $productStatus = $product->getStatus();
+        $productSalable = $this->objectManager->get('\Magento\InventorySalesApi\Api\IsProductSalableInterface');
+        $isProductSaleble=(int)$productSalable->execute($product->getSKU(),$this->storeId);
 
         $productVisibility = $this->product_visibility_array[$product->getVisibility()];
         $productURL = $product->getProductUrl();
@@ -347,6 +425,7 @@ class Indexer extends Command
         $stock = $this->objectManager->get('Magento\CatalogInventory\Api\StockRegistryInterface')->getStockItem($product->getId());
         $productStockQty = $stock->getQty();
         $productInStock = $stock->getIsInStock();
+        // echo $productInStock."\n\n";
 
         //get parent ID
         $parentIds = $this->objectManager->create('Magento\ConfigurableProduct\Model\ResourceModel\Product\Type\Configurable')->getParentIdsByChild($productId);
@@ -361,32 +440,64 @@ class Indexer extends Command
         $variation = array();
         if ($productType == "configurable") {
             $data = $product->getTypeInstance()->getConfigurableOptions($product);
+
             $childCount = 0;
             $option = array();
 
+
             foreach ($data as $key => $attr) {
+
                 foreach ($attr as $p) {
-                    $childObject = $this->objectManager->get('Magento\Catalog\Model\Product');
-                    $childProduct = $childObject->loadByAttribute('sku', $p['sku']);
-                    $child_status = $childProduct->getStatus();
 
-                    if ($child_status == 1) {
-                        $option[$p['sku']][$p['attribute_code']] = $p['option_title'];
-                        $option[$p['sku']]['sku'] = $p['sku'];
-                        $option[$p['sku']]['id'] = (int)$childProduct->getId();
-                        $option[$p['sku']]['price'] = (float)$childProduct->getPrice();
-                        $option[$p['sku']]['discounted_price'] = (float)$childProduct->getFinalPrice();
-                        $option[$p['sku']]['status'] = (int)$childProduct->getStatus();
-                        $option[$p['sku']]['visibility'] = $this->product_visibility_array[$childProduct->getVisibility()];
-                        $option[$p['sku']][$p['attribute_code'] . '_' . 'value_code'] = (int)$p['value_index'];
-                        $option[$p['sku']][$p['attribute_code'] . '_code'] = $key;
-                        //get stock details
-                        $childStock = $this->objectManager->get('Magento\CatalogInventory\Api\StockRegistryInterface')->getStockItem($childProduct->getId());
-                        $option[$p['sku']]['stock_qty'] = $childStock->getQty();
-                        $option[$p['sku']]['in_stock'] = $childStock->getIsInStock();
+                    // start Here
 
-                        if ($option[$p['sku']]['in_stock'] && ($option[$p['sku']]['stock_qty'] > 0)) {
-                            $configurableAttributes['_' . $p['attribute_code']][] = $p['option_title'];
+
+                    $productCollectionFactory = $this->objectManager->create('\Magento\Catalog\Model\ResourceModel\Product\CollectionFactory');
+
+                    $childProductCollection = $productCollectionFactory->create()
+                        ->addAttributeToSelect('*')
+                        ->addStoreFilter($this->storeId)
+                        ->addAttributeToFilter('sku', array('like' => $p['sku']));
+
+                    foreach ($childProductCollection as $childProduct) {
+
+                        $objectManager = \Magento\Framework\App\ObjectManager::getInstance();
+                        $StockState = $objectManager->get('\Magento\InventorySalesApi\Api\GetProductSalableQtyInterface');
+                        $childStockQty =(int) $StockState->execute($childProduct->getSku(), $this->storeId);
+                        $isSaleble=(int)$productSalable->execute($childProduct->getSku(),$this->storeId);
+                        $child_status = $childProduct->getStatus();
+
+
+                        if ($child_status== 1) {
+                            $option[$p['sku']][$p['attribute_code']] = $p['option_title'];
+                            $option[$p['sku']]['sku'] = $p['sku'];
+                            $option[$p['sku']]['id'] = (int)$childProduct->getId();
+                            $discountPercentage = round($this->getCatalogPriceRuleFromProduct($childProduct, 1));
+                            $option[$p['sku']]['price'] = (float)$childProduct->getPrice();
+                            if ($discountPercentage) {
+                                $option[$p['sku']]['discounted_price'] = round((float)($option[$p['sku']]['price'] - ($option[$p['sku']]['price'] * $discountPercentage / 100)));
+                            } else {
+                                $option[$p['sku']]['discounted_price'] = (float)$childProduct->getFinalPrice();
+                            }
+
+
+                            $option[$p['sku']]['visibility'] = $this->product_visibility_array[$childProduct->getVisibility()];
+                            $option[$p['sku']][$p['attribute_code'] . '_' . 'value_code'] = (int)$p['value_index'];
+                            $option[$p['sku']][$p['attribute_code'] . '_code'] = $key;
+                            $varientType[$p['sku']]['option'][] = $p['attribute_code'];
+                            foreach ($varientType[$p['sku']]['option'] as $k => $value) {
+                                $option[$p['sku']]['option_' . ($k + 1)] = $value;
+                            }
+                            //get stock details
+
+                            $option[$p['sku']]['stock_qty'] = $childStockQty;
+                            $option[$p['sku']]['isSaleble'] = $isSaleble;
+                            $childStock = $this->objectManager->get('Magento\CatalogInventory\Api\StockRegistryInterface')->getStockItem($childProduct->getId());
+                            $option[$p['sku']]['in_stock'] =(int) $childStock->getIsInStock();
+
+                            if ($option[$p['sku']]['in_stock'] && ($option[$p['sku']]['stock_qty'] > 0)) {
+                                $configurableAttributes['_' . $p['attribute_code']][] = $p['option_title'];
+                            }
                         }
                     }
 
@@ -551,6 +662,7 @@ class Indexer extends Command
             'product_type' => $productType,
             'stock_qty' => $productStockQty,
             'in_stock' => $productInStock,
+            'isSaleble'=> $isProductSaleble,
             'parent_id' => $parentId,
             'variation' => $variation,
             'image' => $productImage,
@@ -564,15 +676,15 @@ class Indexer extends Command
             'small_cache_image' => $small_cache_image,
             'base_cache_image' => $base_cache_image
         );
+
         if ($this->discountFilterEnabled) {
             if ($productPrice) {
                 $discount_percentage = (($productPrice - $productSpecialPrice) / $productPrice) * 100;
                 $productArray['discount_percentage'] = round($discount_percentage);
             }
         }
-        $array = array_merge($productArray, $catpathArray, $catlevelArray, $customAttributes, $configurableAttributes);
-
-        return $array;
+        $array_data = array_merge($productArray, $catpathArray, $catlevelArray, $customAttributes, $configurableAttributes);
+        return $array_data;
     }
 
     public function getProductCollection($storeId)
