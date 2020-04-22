@@ -47,6 +47,7 @@ class Indexer extends Command
 
     protected function configure()
     {
+       error_reporting(0);
         $options = [
             new InputOption(
                 self::NAME,
@@ -123,10 +124,6 @@ class Indexer extends Command
         $this->discountFilterEnabled = $this->objectManager->create('Gs\Searchtap\Helper\Data')->getConfigValue('st_settings/st_discount/st_discount_enabled', $this->storeId);
         $this->st = new SearchTapAPI($this->applicationId, $this->collectionName, $this->adminKey);
     }
-
-//    public function initializeSearchtap () {
-//        $st = new SearchTapClient($this->collectionName, $this->adminKey);
-//    }
 
     public function indexSingleProduct($ids)
     {
@@ -413,7 +410,7 @@ class Indexer extends Command
         $productThumbnailImage = $store->getBaseUrl(\Magento\Framework\UrlInterface::URL_TYPE_MEDIA) . 'catalog/product' . $product->getThumbnail();
 
         $image_helper = $this->objectManager->create('Magento\Catalog\Helper\ImageFactory');
-        $image = $image_helper->create()->init($product, 'category_page_list')->resize($this->imageWidth, $this->imageHeight)->getUrl();
+      //  $image = $image_helper->create()->init($product, 'category_page_list')->resize($this->imageWidth, $this->imageHeight)->getUrl();
         $thubnail_cache_image = $image_helper->create()->init($product, 'product_thumbnail_image')->resize($this->imageWidth, $this->imageHeight)->getUrl();
         $small_cache_image = $image_helper->create()->init($product, 'product_small_image')->resize($this->imageWidth, $this->imageHeight)->getUrl();
         $base_cache_image = $image_helper->create()->init($product, 'product_base_image')->resize($this->imageWidth, $this->imageHeight)->getUrl();
@@ -481,7 +478,7 @@ class Indexer extends Command
                 $row++;
             }
 
-            for ($i = 0; $i < $row; $i++) {
+           for ($i = 0; $i < $row; $i++) {
                 for ($j = 0; $j < $row; $j++) {
                     if ($pathIds[$i] == $path_name[$j][0]) {
                         if ($pathByName == '') {
@@ -489,26 +486,19 @@ class Indexer extends Command
                         } else {
                             $pathByName .= '|||' . $path_name[$j][1];
                         }
-                        if (!empty($catlevelArray['_category_level_' . $level])) {
-                            if (!in_array($path_name[$j][1], $catlevelArray['_category_level_' . $level]))
-                                $catlevelArray['_category_level_' . $level][] = $path_name[$j][1];
-                        }
 
-                        // $catlevelArray['_category_level_' . $level][][str_replace(' ','_', $path_name[$j][1])]=$product->getId();
+                        if (!in_array($path_name[$j][1], $catlevelArray['_category_level_' . $level]))
+                            $catlevelArray['_category_level_' . $level][] = $path_name[$j][1];
                     }
                 }
-                if (!empty($catlevelArray['_category_level_' . $level])) {
-                    if (!in_array($pathByName, $catpathArray['categories_level_' . $level]))
-                        $catpathArray['categories_level_' . $level][] = $pathByName;
-                }
+
+                if (!in_array($pathByName, $catpathArray['categories_level_' . $level]))
+                    $catpathArray['categories_level_' . $level][] = $pathByName;
+
                 $level++;
             }
         }
-        //  foreach($catlevelArray as $key=>$val){
-        //  $catlevelArray[$key]=array_unique($val, SORT_REGULAR);
-        // }
-
-        // print_r($catlevelArray);
+       
 
         //get custom attributes
         $selected = explode(',', $this->selectedAttributes);
@@ -559,7 +549,6 @@ class Indexer extends Command
             '_category' => $_categories,
             'currency_code' => $currencyCode,
             'currency_symbol' => $currencySymbol,
-            'cache_image' => $image,
             'thumbnail_cache_image' => $thubnail_cache_image,
             'small_cache_image' => $small_cache_image,
             'base_cache_image' => $base_cache_image
@@ -571,7 +560,7 @@ class Indexer extends Command
             }
         }
         $array = array_merge($productArray, $catpathArray, $catlevelArray, $customAttributes, $configurableAttributes);
-
+      
         return $array;
     }
 
