@@ -47,7 +47,7 @@ class Indexer extends Command
 
     protected function configure()
     {
-       error_reporting(0);
+        error_reporting(0);
         $options = [
             new InputOption(
                 self::NAME,
@@ -193,7 +193,7 @@ class Indexer extends Command
                 ->setPageSize($productSteps)
                 ->setCurPage($counter);
 
-            $collections->getSelect()->joinLeft(array(
+          /*  $collections->getSelect()->joinLeft(array(
                 'link_table' => 'catalog_product_super_link'),
                 'link_table.product_id = e.entity_id',
                 array('product_id')
@@ -201,7 +201,7 @@ class Indexer extends Command
 
             $collections->getSelect()->where('link_table.product_id IS NULL');
 
-            $collections->load();
+            $collections->load();*/
 
             $this->productsJson($collections);
 
@@ -323,7 +323,8 @@ class Indexer extends Command
         $writer = new \Zend\Log\Writer\Stream(BP . '/var/log/searchtap.log');
         $this->logger = new \Zend\Log\Logger();
         $this->logger->addWriter($writer);
-
+        $store = $this->objectManager->get('Magento\Store\Model\StoreManagerInterface')->getStore();
+        $image_helper = $this->objectManager->create('Magento\Catalog\Helper\ImageFactory');
         $emulator = $this->objectManager->create('Magento\Store\Model\App\Emulation');
         $emulator->startEnvironmentEmulation($this->storeId, \Magento\Framework\App\Area::AREA_FRONTEND, true);
 
@@ -363,6 +364,7 @@ class Indexer extends Command
 
             foreach ($data as $key => $attr) {
                 foreach ($attr as $p) {
+                   
                     $childObject = $this->objectManager->get('Magento\Catalog\Model\Product');
                     $childProduct = $childObject->loadByAttribute('sku', $p['sku']);
                     $child_status = $childProduct->getStatus();
@@ -370,6 +372,8 @@ class Indexer extends Command
                     if ($child_status == 1) {
                         $option[$p['sku']][$p['attribute_code']] = $p['option_title'];
                         $option[$p['sku']]['sku'] = $p['sku'];
+                        $option[$p['sku']]['url'] = $childProduct->getProductUrl();
+                        $option[$p['sku']]['image_url'] = $image_helper->create()->init($childProduct, 'product_small_image')->resize($this->imageWidth, $this->imageHeight)->getUrl();
                         $option[$p['sku']]['id'] = (int)$childProduct->getId();
                         $option[$p['sku']]['price'] = (float)$childProduct->getPrice();
                         $option[$p['sku']]['discounted_price'] = (float)$childProduct->getFinalPrice();
@@ -404,13 +408,13 @@ class Indexer extends Command
         }
 
         //get images
-        $store = $this->objectManager->get('Magento\Store\Model\StoreManagerInterface')->getStore();
+
         $productImage = $store->getBaseUrl(\Magento\Framework\UrlInterface::URL_TYPE_MEDIA) . 'catalog/product' . $product->getImage();
         $productSmallImage = $store->getBaseUrl(\Magento\Framework\UrlInterface::URL_TYPE_MEDIA) . 'catalog/product' . $product->getSmallImage();
         $productThumbnailImage = $store->getBaseUrl(\Magento\Framework\UrlInterface::URL_TYPE_MEDIA) . 'catalog/product' . $product->getThumbnail();
 
-        $image_helper = $this->objectManager->create('Magento\Catalog\Helper\ImageFactory');
-      //  $image = $image_helper->create()->init($product, 'category_page_list')->resize($this->imageWidth, $this->imageHeight)->getUrl();
+
+        //  $image = $image_helper->create()->init($product, 'category_page_list')->resize($this->imageWidth, $this->imageHeight)->getUrl();
         $thubnail_cache_image = $image_helper->create()->init($product, 'product_thumbnail_image')->resize($this->imageWidth, $this->imageHeight)->getUrl();
         $small_cache_image = $image_helper->create()->init($product, 'product_small_image')->resize($this->imageWidth, $this->imageHeight)->getUrl();
         $base_cache_image = $image_helper->create()->init($product, 'product_base_image')->resize($this->imageWidth, $this->imageHeight)->getUrl();
@@ -478,7 +482,7 @@ class Indexer extends Command
                 $row++;
             }
 
-           for ($i = 0; $i < $row; $i++) {
+            for ($i = 0; $i < $row; $i++) {
                 for ($j = 0; $j < $row; $j++) {
                     if ($pathIds[$i] == $path_name[$j][0]) {
                         if ($pathByName == '') {
@@ -498,7 +502,7 @@ class Indexer extends Command
                 $level++;
             }
         }
-       
+
 
         //get custom attributes
         $selected = explode(',', $this->selectedAttributes);
@@ -551,7 +555,8 @@ class Indexer extends Command
             'currency_symbol' => $currencySymbol,
             'thumbnail_cache_image' => $thubnail_cache_image,
             'small_cache_image' => $small_cache_image,
-            'base_cache_image' => $base_cache_image
+            'base_cache_image' => $base_cache_image,
+            'product_categories_ids'=>$product->getCategoryIds()
         );
         if ($this->discountFilterEnabled) {
             if ($productPrice) {
@@ -560,7 +565,6 @@ class Indexer extends Command
             }
         }
         $array = array_merge($productArray, $catpathArray, $catlevelArray, $customAttributes, $configurableAttributes);
-      
         return $array;
     }
 
