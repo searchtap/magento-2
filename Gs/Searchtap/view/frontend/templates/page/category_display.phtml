@@ -1,3 +1,7 @@
-<?php
-echo "Category ID:".$this->getCategoryId();
-?>
+<div id="category-content" data-category-id="<?php echo $this->getCategoryId(); ?>" data-category-name="<?php echo $this->getCategoryName();?>"></div>
+<script>
+  window.updateMiniCartSt=function update_mini_cart_st(){
+  require('Magento_Customer/js/customer-data').reload();
+ }
+</script>
+

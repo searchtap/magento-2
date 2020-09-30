@@ -26,6 +26,13 @@ class Index extends \Magento\Framework\View\Element\Template
         return $category->getId();
     }
 
+     public function getCategoryName()
+    {
+        $objectManager = \Magento\Framework\App\ObjectManager::getInstance();
+        $category = $objectManager->get('Magento\Framework\Registry')->registry('current_category');
+        return $category->getName();
+    }
+
     public function getCurrentCategory()
     {
         return $this->_registry->registry('current_category');

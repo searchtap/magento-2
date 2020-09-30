@@ -4,3 +4,9 @@ $storeId=$this->helper('Gs\Searchtap\Helper\Data')->getConfig('st_settings/gener
 $template=$this->helper('Gs\Searchtap\Helper\Data')->getConfig('st_settings/st_template/st_html');
 
 echo $template;
+?>
+<script>
+  window.updateMiniCartSt=function update_mini_cart_st(){
+  require('Magento_Customer/js/customer-data').reload();
+ }
+</script>

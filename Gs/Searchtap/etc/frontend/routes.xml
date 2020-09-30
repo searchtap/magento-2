@@ -3,6 +3,6 @@
     <router id="standard">
         <route id="gs_searchtap" frontName="st-search">
             <module name="Gs_Searchtap" />
-        </route>
+        </route>     
     </router>
 </config>
