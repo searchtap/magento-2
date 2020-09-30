@@ -10,7 +10,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Input\InputDefinition;
 use Gs\Searchtap\Console\Command\SearchTapAPI;
-
+use \Magento\Catalog\Model\CategoryRepository;
 //use Searchtap\src\Searchtap\SearchTapClient;
 
 class Indexer extends Command
@@ -29,6 +29,7 @@ class Indexer extends Command
     public $actualCount = 0;
     public $parentCount = 0;
     public $categoryIncludeInMenu = 0;
+    public $categoryRepository;
     public $skipCategoryIds;
     public $batchsize;
     protected $product_visibility_array = array('1' => 'Not Visible Individually', '2' => 'Catalog', '3' => 'Search', '4' => 'Catalog,Search');
@@ -39,8 +40,9 @@ class Indexer extends Command
     const STORE = 's';
     const DELETE_FULL_SYNC = 'f';
 
-    public function __construct(\Magento\Framework\App\State $state)
+    public function __construct(\Magento\Framework\App\State $state,CategoryRepository $categoryRepository)
     {
+        $this->categoryRepository = $categoryRepository;
         $this->state = $state;
         parent::__construct();
     }
@@ -137,8 +139,18 @@ class Indexer extends Command
         $collection = $productCollection->create()
             ->addStoreFilter($this->storeId)
             ->addAttributeToSelect("*")
+            ->addAttributeToFilter('status', array('eq' => 1))
             ->addAttributeToFilter('entity_id', array('in' => $productIds));
 
+        $collection->getSelect()->joinLeft(array(
+            'link_table' => 'catalog_product_super_link'),
+            'link_table.product_id = e.entity_id',
+            array('product_id')
+        );
+
+        $collection->getSelect()->where('link_table.product_id IS NULL');
+
+        $collection->load();
         $this->productsJson($collection);
     }
 
@@ -180,7 +192,7 @@ class Indexer extends Command
         $totalProducts = $collection->getSize();
 
         $this->logger->info('Total Products that need to be indexed = ' . $totalProducts);
-
+      
         while ($i <= $totalProducts) {
             $counter++;
 
@@ -193,7 +205,7 @@ class Indexer extends Command
                 ->setPageSize($productSteps)
                 ->setCurPage($counter);
 
-          /*  $collections->getSelect()->joinLeft(array(
+            $collections->getSelect()->joinLeft(array(
                 'link_table' => 'catalog_product_super_link'),
                 'link_table.product_id = e.entity_id',
                 array('product_id')
@@ -201,7 +213,7 @@ class Indexer extends Command
 
             $collections->getSelect()->where('link_table.product_id IS NULL');
 
-            $collections->load();*/
+            $collections->load();
 
             $this->productsJson($collections);
 
@@ -313,7 +325,6 @@ class Indexer extends Command
 
         if (!empty($invalid_product)) {
             $this->st->searchtapCurlDeleteRequest($invalid_product);
-
             unset($invalid_product);
         }
     }
@@ -332,6 +343,7 @@ class Indexer extends Command
         $productName = html_entity_decode($product->getName());
         $productSKU = $product->getSKU();
         $productStatus = $product->getStatus();
+       
 
         $productVisibility = $this->product_visibility_array[$product->getVisibility()];
         $productURL = $product->getProductUrl();
@@ -344,7 +356,7 @@ class Indexer extends Command
         //get stock details
         $stock = $this->objectManager->get('Magento\CatalogInventory\Api\StockRegistryInterface')->getStockItem($product->getId());
         $productStockQty = $stock->getQty();
-        $productInStock = $stock->getIsInStock();
+        $productInStock = (int)$stock->getIsInStock();
 
         //get parent ID
         $parentIds = $this->objectManager->create('Magento\ConfigurableProduct\Model\ResourceModel\Product\Type\Configurable')->getParentIdsByChild($productId);
@@ -375,6 +387,7 @@ class Indexer extends Command
                         $option[$p['sku']]['url'] = $childProduct->getProductUrl();
                         $option[$p['sku']]['image_url'] = $image_helper->create()->init($childProduct, 'product_small_image')->resize($this->imageWidth, $this->imageHeight)->getUrl();
                         $option[$p['sku']]['id'] = (int)$childProduct->getId();
+                        $option[$p['sku']]['name'] = $childProduct->getName();
                         $option[$p['sku']]['price'] = (float)$childProduct->getPrice();
                         $option[$p['sku']]['discounted_price'] = (float)$childProduct->getFinalPrice();
                         $option[$p['sku']]['status'] = (int)$childProduct->getStatus();
@@ -384,7 +397,7 @@ class Indexer extends Command
                         //get stock details
                         $childStock = $this->objectManager->get('Magento\CatalogInventory\Api\StockRegistryInterface')->getStockItem($childProduct->getId());
                         $option[$p['sku']]['stock_qty'] = $childStock->getQty();
-                        $option[$p['sku']]['in_stock'] = $childStock->getIsInStock();
+                        $option[$p['sku']]['in_stock'] = (int)$childStock->getIsInStock();
 
                         if ($option[$p['sku']]['in_stock'] && ($option[$p['sku']]['stock_qty'] > 0)) {
                             $configurableAttributes['_' . $p['attribute_code']][] = $p['option_title'];
@@ -404,7 +417,7 @@ class Indexer extends Command
                 $variation[$childCount] = $child;
                 $childCount++;
             }
-
+     
         }
 
         //get images
@@ -514,7 +527,7 @@ class Indexer extends Command
             if ($value) {
                 if ($product->getResource()->getAttribute($attr)->getFrontendInput() == 'multiselect') {
                     $explodeAttrs = explode(',', $product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
-                    $customAttributes[$attr] = array_map("htmlspecialchars_decode", $explodeAttrs);
+                    $customAttributes[$attr] = array_map("trim",array_map("htmlspecialchars_decode", $explodeAttrs));
                 } else if ($product->getResource()->getAttribute($attr)->getFrontendInput() == 'boolean') {
                     $customAttributes[$attr] = (bool)$product->getData($attr);
                 } else if ($product->getResource()->getAttribute($attr)->getFrontendInput() == 'price') {
@@ -525,13 +538,30 @@ class Indexer extends Command
                 } else {
                     $attribute_value = $product->getData($attr);
                     if ($attribute_value)
-                        $customAttributes[$attr] = htmlspecialchars_decode($product->getResource()->getAttribute($attr)->getFrontend()->getValue($product));
+                        $customAttributes[$attr] = trim(htmlspecialchars_decode($product->getResource()->getAttribute($attr)->getFrontend()->getValue($product)));
                 }
             }
         }
 
         $emulator->stopEnvironmentEmulation();
 
+        $allCategoriesIds=$product->getCategoryIds();
+        foreach ($allCategoriesIds as $catId){
+            $categoryProductPosition = $this->categoryRepository->get($catId, $this->storeId);
+            $product_pos=$categoryProductPosition->getProductsPosition();
+            if($productInStock){
+                $category_position[$catId]=(int)$product_pos[$productId];
+            }
+            else{
+                if((int)$product_pos[$productId]){
+                    $category_position[$catId]=(int)$product_pos[$productId]*999;
+                 }
+                else{
+                    $category_position[$catId]=999;
+            }
+            }
+        }
+    
         $productArray = array(
             'id' => (int)$productId,
             'name' => $productName,
@@ -556,15 +586,17 @@ class Indexer extends Command
             'thumbnail_cache_image' => $thubnail_cache_image,
             'small_cache_image' => $small_cache_image,
             'base_cache_image' => $base_cache_image,
-            'product_categories_ids'=>$product->getCategoryIds()
+            'product_categories_ids'=>$allCategoriesIds,
+            'category_position'=>$category_position
         );
         if ($this->discountFilterEnabled) {
             if ($productPrice) {
                 $discount_percentage = (($productPrice - $productSpecialPrice) / $productPrice) * 100;
                 $productArray['discount_percentage'] = round($discount_percentage);
             }
-        }
+        }         
         $array = array_merge($productArray, $catpathArray, $catlevelArray, $customAttributes, $configurableAttributes);
+        unset($allCategoriesIds,$category_position);
         return $array;
     }
 
