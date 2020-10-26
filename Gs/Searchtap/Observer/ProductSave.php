@@ -56,10 +56,12 @@ class ProductSave implements ObserverInterface
 
         if (count($storeIds) > 0) {
             foreach ($storeIds as $storeId) {
+                if($status)
                 exec('php ' . $directory->getRoot() . '/bin/magento searchtap:indexer --p ' . $product->getId() . ' --s ' . $storeId . ' > /dev/null 2>/dev/null &');
             }
         }
         else {
+            if($status)
             exec('php ' . $directory->getRoot() . '/bin/magento searchtap:indexer --p ' . $product->getId() . ' --s ' . $storeId . ' > /dev/null 2>/dev/null &');
         }
     }
