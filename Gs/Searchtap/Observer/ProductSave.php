@@ -24,7 +24,6 @@ class ProductSave implements ObserverInterface
         $writer = new \Zend\Log\Writer\Stream(BP . '/var/log/searchtap.log');
         $this->logger = new \Zend\Log\Logger();
         $this->logger->addWriter($writer);
-
         //check if product belongs to configurable association
         $parentIds = $this->objectManager->create('Magento\ConfigurableProduct\Model\ResourceModel\Product\Type\Configurable')->getParentIdsByChild($product->getId());
         if (isset($parentIds[0])) {
